@@ -1,287 +1,373 @@
 import * as THREE from 'three';
-import { updateActiveLevels, LevelInfo } from '../config/structural.config';
-import { THEME } from '../config/theme.config';
 import { DIMENSIONS } from '../config/dimensions.config';
 import {
+  Level,
   LevelElement,
   LevelTemplateType,
   QuickGenerateLevelConfig,
 } from './level/types/LevelTypes';
-import { LevelQuickGenerator } from './level/generator/LevelQuickGenerator';
+import { LevelStateManager } from './level/state/LevelStateManager';
+import { LevelRenderer } from './level/rendering/LevelRenderer';
+import { LevelInlineEditor } from './level/interaction/LevelInlineEditor';
 
 export class LevelSystem {
   public group = new THREE.Group();
-  private levels: LevelElement[] = [];
+  public state: LevelStateManager;
+  public renderer: LevelRenderer;
+  public inlineEditor: LevelInlineEditor;
+
   public selectedLevelId: string | null = null;
+  public hoveredLevelId: string | null = null;
+
+  // Estados de arrastre interactivo (Grips estándar y Grips de Codo)
+  public isDraggingGrip = false;
+  public activeDraggingGrip: { levelId: string; end: 'start' | 'end' } | null = null;
+
+  public isDraggingElbowGrip = false;
+  public activeDraggingElbow: { levelId: string; end: 'start' | 'end' } | null = null;
+
+  public onLevelsChanged?: (levels: Level[]) => void;
 
   constructor(scene: THREE.Scene) {
     this.group.name = 'BimLevelSystem';
     scene.add(this.group);
 
-    // Cargar plantilla residencial inicial por defecto
-    this.applyTemplate('residential');
+    this.state = new LevelStateManager();
+    this.renderer = new LevelRenderer();
+    this.inlineEditor = new LevelInlineEditor();
+
+    this.group.add(this.renderer.rootGroup);
+
+    // ESTADO INICIAL OBLIGATORIO: Canvas 100% limpio / en blanco
+    this.rebuildMeshes();
+  }
+
+  public get levelHitMeshes(): THREE.Mesh[] {
+    return this.renderer.levelHitMeshes;
+  }
+
+  public get headsGroup(): THREE.Group {
+    return this.renderer.headsGroup;
+  }
+
+  public get bubbleHits(): Array<{ levelId: string; end: 'start' | 'end'; mesh: THREE.Mesh; worldPos: THREE.Vector3 }> {
+    return this.renderer.bubbleHits;
+  }
+
+  public get elbowToggles(): Array<{ levelId: string; end: 'start' | 'end'; mesh: THREE.Sprite }> {
+    return this.renderer.elbowToggles;
+  }
+
+  public get bubbleToggles(): Array<{ levelId: string; end: 'start' | 'end'; mesh: THREE.Sprite }> {
+    return this.renderer.bubbleToggles;
+  }
+
+  public get grips(): Array<{ levelId: string; end: 'start' | 'end'; mesh: THREE.Mesh }> {
+    return this.renderer.grips;
+  }
+
+  public get elbowGrips(): Array<{ levelId: string; end: 'start' | 'end'; mesh: THREE.Mesh }> {
+    return this.renderer.elbowGrips;
+  }
+
+  public getLineMeshes(): THREE.Line[] {
+    return this.renderer.getLineMeshes();
+  }
+
+  public selectLevel(id: string | null): void {
+    this.selectedLevelId = id;
+    this.rebuildMeshes();
+  }
+
+  public getSelectedLevel(): Level | undefined {
+    if (!this.selectedLevelId) return undefined;
+    return this.state.getLevel(this.selectedLevelId);
+  }
+
+  public setHoveredLevel(id: string | null): void {
+    if (this.hoveredLevelId === id) return;
+    this.hoveredLevelId = id;
+    this.renderer.setHoveredLevel(id, this.selectedLevelId, this.state.getLevels());
+  }
+
+  // =========================================================================
+  // MANIPULACIÓN Y ARRASTRE DE GRIPS (ALARGAR / ACHICAR NIVELES)
+  // =========================================================================
+
+  public startGripDrag(levelId: string, end: 'start' | 'end'): boolean {
+    const lvl = this.state.getLevel(levelId);
+    if (!lvl) return false;
+    this.isDraggingGrip = true;
+    this.activeDraggingGrip = { levelId, end };
+    return true;
+  }
+
+  public updateGripDrag(pos: { x: number; y: number; z: number }): void {
+    if (!this.isDraggingGrip || !this.activeDraggingGrip) return;
+    const mainLvl = this.state.getLevel(this.activeDraggingGrip.levelId);
+    if (!mainLvl) return;
+
+    const end = this.activeDraggingGrip.end;
+
+    if (end === 'end') {
+      const newX = Math.round(pos.x * 20) / 20;
+      const newZ = Math.round(pos.z * 20) / 20;
+
+      const currentStartX = typeof mainLvl.start.x === 'number' ? mainLvl.start.x : -22;
+      const currentStartZ = typeof mainLvl.start.z === 'number' ? mainLvl.start.z : -22;
+
+      // Actualizar X si es mayor que start.x + 2.0
+      if (newX > currentStartX + 2.0) {
+        mainLvl.end.x = newX;
+        // Si el nivel tiene bloqueo de alineación (Revit lock), propagar a todos los niveles bloqueados
+        if (mainLvl.isLocked) {
+          this.state.getLevels().forEach(other => {
+            if (other.id !== mainLvl.id && other.isLocked) {
+              other.end.x = newX;
+            }
+          });
+        }
+      }
+
+      // Actualizar Z si es mayor que start.z + 2.0
+      if (newZ > currentStartZ + 2.0) {
+        mainLvl.end.z = newZ;
+        if (mainLvl.isLocked) {
+          this.state.getLevels().forEach(other => {
+            if (other.id !== mainLvl.id && other.isLocked) {
+              other.end.z = newZ;
+            }
+          });
+        }
+      }
+    } else {
+      // end === 'start'
+      const newX = Math.round(pos.x * 20) / 20;
+      const newZ = Math.round(pos.z * 20) / 20;
+
+      const currentEndX = typeof mainLvl.end.x === 'number' ? mainLvl.end.x : 22;
+      const currentEndZ = typeof mainLvl.end.z === 'number' ? mainLvl.end.z : 22;
+
+      if (newX < currentEndX - 2.0) {
+        mainLvl.start.x = newX;
+        if (mainLvl.isLocked) {
+          this.state.getLevels().forEach(other => {
+            if (other.id !== mainLvl.id && other.isLocked) {
+              other.start.x = newX;
+            }
+          });
+        }
+      }
+
+      if (newZ < currentEndZ - 2.0) {
+        mainLvl.start.z = newZ;
+        if (mainLvl.isLocked) {
+          this.state.getLevels().forEach(other => {
+            if (other.id !== mainLvl.id && other.isLocked) {
+              other.start.z = newZ;
+            }
+          });
+        }
+      }
+    }
+
+    this.rebuildMeshes();
+  }
+
+  public endGripDrag(): void {
+    this.isDraggingGrip = false;
+    this.activeDraggingGrip = null;
+    this.rebuildMeshes();
+  }
+
+  // =========================================================================
+  // MANIPULACIÓN Y ARRASTRE DE CODO (ELBOW JOG DRAG)
+  // =========================================================================
+
+  public startElbowDrag(levelId: string, end: 'start' | 'end'): boolean {
+    const lvl = this.state.getLevel(levelId);
+    if (!lvl) return false;
+    this.isDraggingElbowGrip = true;
+    this.activeDraggingElbow = { levelId, end };
+    return true;
+  }
+
+  public updateElbowDrag(pos: { x: number; y: number; z: number }): void {
+    if (!this.isDraggingElbowGrip || !this.activeDraggingElbow) return;
+    const lvl = this.state.getLevel(this.activeDraggingElbow.levelId);
+    if (!lvl) return;
+
+    // Calcular desplazamiento vertical relativo a la cota del nivel
+    const diffY = pos.y - lvl.elevation;
+    const newOffset = Math.round(diffY * 20) / 20;
+    // Clamping seguro entre -5.0m y +5.0m
+    const clampedOffset = Math.max(-5.0, Math.min(5.0, newOffset));
+
+    if (this.activeDraggingElbow.end === 'end') {
+      if (!lvl.endElbow) {
+        lvl.endElbow = { active: true, verticalOffset: 1.0, breakDistance: 2.0 };
+      }
+      lvl.endElbow.active = true;
+      lvl.endElbow.verticalOffset = clampedOffset;
+    } else {
+      if (!lvl.startElbow) {
+        lvl.startElbow = { active: true, verticalOffset: 1.0, breakDistance: 2.0 };
+      }
+      lvl.startElbow.active = true;
+      lvl.startElbow.verticalOffset = clampedOffset;
+    }
+
+    this.rebuildMeshes();
+  }
+
+  public endElbowDrag(): void {
+    this.isDraggingElbowGrip = false;
+    this.activeDraggingElbow = null;
+    this.rebuildMeshes();
+  }
+
+  // =========================================================================
+  // EDICIÓN EN LÍNEA Y GESTIÓN DE PLANTILLAS / ELEMENTOS
+  // =========================================================================
+
+  public openInlineEditor(
+    levelId: string,
+    worldPos: THREE.Vector3,
+    camera: THREE.Camera,
+    domElement: HTMLElement,
+    onSuccess?: () => void,
+    onWarning?: (msg: string) => void
+  ): void {
+    const lvl = this.state.getLevel(levelId);
+    if (!lvl) return;
+
+    this.inlineEditor.open({
+      worldPos,
+      level: lvl,
+      camera,
+      domElement,
+      isNameUnique: (name, excludeId) => this.state.isNameUnique(name, excludeId),
+      onCommit: (newName, newElev) => {
+        this.updateLevel(levelId, { name: newName, elevation: newElev });
+        onSuccess?.();
+      },
+      onValidationWarning: onWarning,
+    });
+  }
+
+  public closeInlineEditor(): void {
+    this.inlineEditor.close();
+  }
+
+  private notifyLevelsChanged(): void {
+    if (this.onLevelsChanged) {
+      this.onLevelsChanged(this.getLevels());
+    }
   }
 
   /**
    * Aplica un esquema predeterminado de niveles
    */
-  public applyTemplate(templateId: LevelTemplateType): LevelElement[] {
-    const tmpl = LevelQuickGenerator.getTemplate(templateId);
-    return this.quickGenerate(tmpl.config);
+  public applyTemplate(templateId: LevelTemplateType): Level[] {
+    const levels = this.state.applyTemplate(templateId, DIMENSIONS.levels.boundsExtentDefault);
+    this.rebuildMeshes();
+    this.notifyLevelsChanged();
+    return levels;
   }
 
   /**
    * Generación Rápida de Niveles en lote a partir de una configuración
    */
-  public quickGenerate(config: QuickGenerateLevelConfig): LevelElement[] {
-    const generated = LevelQuickGenerator.generate(config, DIMENSIONS.levels.boundsExtentDefault);
-    this.setLevels(generated);
-    return this.levels;
-  }
-
-  /**
-   * Asigna la lista completa de niveles y actualiza el estado global de cotas
-   */
-  public setLevels(elements: LevelElement[]): void {
-    this.levels = [...elements].sort((a, b) => a.elevation - b.elevation);
-
-    // Sincronizar con el store global de niveles para cálculos estructurales y de interfaz
-    const levelInfos: LevelInfo[] = this.levels.map((lvl, index) => ({
-      index,
-      name: lvl.name,
-      elevation: lvl.elevation,
-    }));
-    updateActiveLevels(levelInfos);
-
-    // Reconstruir visualización 3D y alzados
+  public quickGenerate(config: QuickGenerateLevelConfig): Level[] {
+    const levels = this.state.quickGenerate(config, DIMENSIONS.levels.boundsExtentDefault);
     this.rebuildMeshes();
+    this.notifyLevelsChanged();
+    return levels;
   }
 
-  public getLevels(): LevelElement[] {
-    return [...this.levels];
+  public setLevels(elements: Level[]): void {
+    this.state.elements = [...elements].sort((a, b) => a.elevation - b.elevation);
+    this.state.syncWithGlobalConfig();
+    this.rebuildMeshes();
+    this.notifyLevelsChanged();
   }
 
-  public getLevel(id: string): LevelElement | undefined {
-    return this.levels.find(l => l.id === id);
+  public getLevels(): Level[] {
+    return this.state.getLevels();
   }
 
-  public updateLevel(id: string, partial: Partial<LevelElement>): void {
-    const idx = this.levels.findIndex(l => l.id === id);
-    if (idx !== -1) {
-      this.levels[idx] = { ...this.levels[idx], ...partial };
-      this.setLevels(this.levels);
+  public getLevel(id: string): Level | undefined {
+    return this.state.getLevel(id);
+  }
+
+  public addLevel(levelData: Partial<Level> & { elevation: number }): Level {
+    const lvl = this.state.addLevel(levelData);
+    this.rebuildMeshes();
+    this.notifyLevelsChanged();
+    return lvl;
+  }
+
+  public updateLevel(id: string, partial: Partial<Level>): void {
+    const success = this.state.updateLevel(id, partial);
+    if (success) {
+      this.rebuildMeshes();
+      this.notifyLevelsChanged();
     }
+  }
+
+  public deleteLevel(id: string): void {
+    const success = this.state.deleteLevel(id);
+    if (success) {
+      if (this.selectedLevelId === id) {
+        this.selectedLevelId = null;
+      }
+      this.rebuildMeshes();
+      this.notifyLevelsChanged();
+    }
+  }
+
+  public clear(): void {
+    this.state.clear();
+    this.selectedLevelId = null;
+    this.hoveredLevelId = null;
+    this.rebuildMeshes();
+    this.notifyLevelsChanged();
+  }
+
+  public resetToDefault(): void {
+    this.state.initDefaultLevel();
+    this.selectedLevelId = null;
+    this.hoveredLevelId = null;
+    this.rebuildMeshes();
+    this.notifyLevelsChanged();
   }
 
   public toggleElbow(id: string, end: 'start' | 'end'): void {
-    const lvl = this.getLevel(id);
-    if (!lvl) return;
-
-    if (end === 'end') {
-      const current = lvl.endElbow?.active;
-      lvl.endElbow = {
-        active: !current,
-        verticalOffset: current ? 0 : 0.8,
-        breakDistance: 2.5,
-      };
-    } else {
-      const current = lvl.startElbow?.active;
-      lvl.startElbow = {
-        active: !current,
-        verticalOffset: current ? 0 : 0.8,
-        breakDistance: 2.5,
-      };
-    }
-    this.setLevels(this.levels);
+    this.state.toggleElbow(id, end);
+    this.rebuildMeshes();
   }
 
   public toggleBubble(id: string, end: 'start' | 'end'): void {
-    const lvl = this.getLevel(id);
-    if (!lvl) return;
-
-    if (end === 'end') {
-      lvl.showEndBubble = !lvl.showEndBubble;
-    } else {
-      lvl.showStartBubble = !lvl.showStartBubble;
-    }
-    this.setLevels(this.levels);
+    this.state.toggleBubble(id, end);
+    this.rebuildMeshes();
   }
 
   public toggleLock(id: string): void {
-    const lvl = this.getLevel(id);
-    if (!lvl) return;
-    lvl.isLocked = !lvl.isLocked;
-    this.setLevels(this.levels);
+    this.state.toggleLock(id);
+    this.rebuildMeshes();
   }
 
   /**
-   * Reconstruye los gráficos 3D (Líneas de datum, planos y cabezales con shoulder break y lock)
+   * Reconstruye los gráficos en la escena
    */
   public rebuildMeshes(boundsExtent: number = DIMENSIONS.levels.boundsExtentDefault): void {
-    // Limpiar geometrías previas
-    while (this.group.children.length > 0) {
-      const child = this.group.children[0];
-      if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
-        child.geometry.dispose();
-        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-        else child.material.dispose();
-      }
-      this.group.remove(child);
-    }
-
-    const half = boundsExtent;
-
-    this.levels.forEach((lvl, index) => {
-      const y = lvl.elevation;
-      const levelGroup = new THREE.Group();
-      levelGroup.name = `LevelDatum-${lvl.id || index}`;
-
-      // 1. Líneas de contorno de datum en el plano XZ a la cota Y
-      const pts = [
-        new THREE.Vector3(-half, y, -half),
-        new THREE.Vector3(half, y, -half),
-        new THREE.Vector3(half, y, half),
-        new THREE.Vector3(-half, y, half),
-        new THREE.Vector3(-half, y, -half),
-      ];
-      const lineGeom = new THREE.BufferGeometry().setFromPoints(pts);
-      const lineMat = new THREE.LineDashedMaterial({
-        color: THEME.levels.contourLine,
-        dashSize: DIMENSIONS.levels.dashSize,
-        gapSize: DIMENSIONS.levels.gapSize,
-        transparent: true,
-        opacity: DIMENSIONS.levels.opacityLine,
-      });
-      const line = new THREE.Line(lineGeom, lineMat);
-      line.computeLineDistances();
-      levelGroup.add(line);
-
-      // 2. Plano de referencia sutil del nivel
-      const planeGeom = new THREE.PlaneGeometry(half * 2, half * 2);
-      planeGeom.rotateX(-Math.PI / 2);
-      planeGeom.translate(0, y, 0);
-      const planeMat = new THREE.MeshBasicMaterial({
-        color: THEME.levels.datumPlane,
-        transparent: true,
-        opacity: DIMENSIONS.levels.opacityPlane,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      const planeMesh = new THREE.Mesh(planeGeom, planeMat);
-      levelGroup.add(planeMesh);
-
-      // 3. Cabezal de Nivel Revit 3D / Alzados (Level Head con Elbow y Candado)
-      if (lvl.showEndBubble) {
-        const headSprite = this.createLevelHeadSprite(lvl, 'end');
-        const elbowY = (lvl.endElbow?.active ? lvl.endElbow.verticalOffset : 0);
-        headSprite.position.set(half + DIMENSIONS.levels.headOffset, y + elbowY, 0);
-        levelGroup.add(headSprite);
-
-        // Cabezal frontal en eje Z
-        const headFront = this.createLevelHeadSprite(lvl, 'end');
-        headFront.position.set(0, y + elbowY, half + DIMENSIONS.levels.headOffset);
-        levelGroup.add(headFront);
-      }
-
-      if (lvl.showStartBubble) {
-        const headSpriteStart = this.createLevelHeadSprite(lvl, 'start');
-        const elbowY = (lvl.startElbow?.active ? lvl.startElbow.verticalOffset : 0);
-        headSpriteStart.position.set(-half - DIMENSIONS.levels.headOffset, y + elbowY, 0);
-        levelGroup.add(headSpriteStart);
-
-        const headFrontStart = this.createLevelHeadSprite(lvl, 'start');
-        headFrontStart.position.set(0, y + elbowY, -half - DIMENSIONS.levels.headOffset);
-        levelGroup.add(headFrontStart);
-      }
-
-      this.group.add(levelGroup);
-    });
+    const levels = this.state.getLevels();
+    this.renderer.rebuild(levels, this.selectedLevelId, this.hoveredLevelId, boundsExtent);
   }
 
-  private createLevelHeadSprite(lvl: LevelElement, _end: 'start' | 'end'): THREE.Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = DIMENSIONS.levels.headCanvasWidth;
-    canvas.height = DIMENSIONS.levels.headCanvasHeight;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const bubbleX = DIMENSIONS.levels.headBubbleX;
-    const bubbleY = DIMENSIONS.levels.headBubbleY;
-    const radius = DIMENSIONS.levels.headBubbleRadius;
-
-    // Si tiene vista asociada (hasPlanView): azul Revit (0x0284c7). Si no: negro / gris oscuro
-    const circleColor = lvl.hasPlanView ? '#0284c7' : '#475569';
-    const quadrantColor = '#ffffff';
-
-    // Círculo exterior
-    ctx.beginPath();
-    ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI * 2);
-    ctx.fillStyle = circleColor;
-    ctx.fill();
-
-    // Cuadrantes diana estilo Revit
-    ctx.beginPath();
-    ctx.moveTo(bubbleX, bubbleY);
-    ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI / 2);
-    ctx.fillStyle = quadrantColor;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(bubbleX, bubbleY);
-    ctx.arc(bubbleX, bubbleY, radius, Math.PI, (3 * Math.PI) / 2);
-    ctx.fillStyle = quadrantColor;
-    ctx.fill();
-
-    ctx.lineWidth = DIMENSIONS.levels.headLineWidth;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
-
-    // Línea directriz horizontal detrás del texto
-    ctx.beginPath();
-    ctx.moveTo(bubbleX + radius, bubbleY);
-    ctx.lineTo(240, bubbleY);
-    ctx.strokeStyle = circleColor;
-    ctx.lineWidth = DIMENSIONS.levels.headLeaderLineWidth;
-    ctx.stroke();
-
-    // Nombre del Nivel (arriba de la línea)
-    ctx.font = `bold ${DIMENSIONS.levels.headTitleFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-    ctx.fillStyle = '#0f172a';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    const shortName = lvl.name.split('(')[0]?.trim() || lvl.name;
-    ctx.fillText(shortName, bubbleX + radius + 8, bubbleY - 4);
-
-    // Cota / Elevación formateada (debajo de la línea)
-    const elevText = LevelQuickGenerator.formatElevation(lvl.elevation);
-    ctx.font = `600 ${DIMENSIONS.levels.headElevationFontSize}px "Courier New", monospace`;
-    ctx.fillStyle = '#0369a1';
-    ctx.fillText(elevText, bubbleX + radius + 8, bubbleY + 22);
-
-    // Indicador de candado de alineación (si está bloqueado)
-    if (lvl.isLocked) {
-      ctx.font = '12px sans-serif';
-      ctx.fillStyle = '#0284c7';
-      ctx.fillText('🔒', bubbleX + radius + 140, bubbleY + 20);
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
-
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      depthTest: false,
-      transparent: true,
-    });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(
-      DIMENSIONS.levels.headSpriteScale.x,
-      DIMENSIONS.levels.headSpriteScale.y,
-      DIMENSIONS.levels.headSpriteScale.z
-    );
-    sprite.renderOrder = DIMENSIONS.renderOrders.levelSystemDatum;
-    return sprite;
+  public dispose(): void {
+    this.renderer.dispose();
   }
 }
+
 export default LevelSystem;

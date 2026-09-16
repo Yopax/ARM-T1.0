@@ -1,6 +1,8 @@
 import { ManagedElement } from '../tools/structural/types';
 import { ViewManager } from '../core/views/ViewManager';
 import { GridElement } from '../config/structural.config';
+import { Level } from '../core/level/types/LevelTypes';
+import { LevelQuickGenerator } from '../core/level/generator/LevelQuickGenerator';
 
 export class Sidebar {
   private propContent: HTMLElement;
@@ -38,11 +40,90 @@ export class Sidebar {
   }
 
   private bindProjectBrowser(): void {
-    document.querySelectorAll<HTMLElement>('.tree-item[data-open-view]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        const viewId = (e.currentTarget as HTMLElement).dataset.openView;
-        if (viewId) this.viewManager.openView(viewId);
+    document.querySelectorAll<HTMLElement>('#sidebar-browser .tree-item[data-open-view]').forEach(item => {
+      const viewId = item.dataset.openView;
+      if (!viewId) return;
+
+      item.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        this.viewManager.openView(viewId);
       });
+
+      item.addEventListener('click', () => {
+        this.viewManager.openView(viewId);
+      });
+    });
+  }
+
+  /**
+   * Sincroniza reactivamente el Navegador de Proyectos (Project Browser) con los niveles del proyecto
+   */
+  public updateProjectBrowser(levels: Level[], activeViewId: string): void {
+    const list = document.getElementById('browser-floor-plans-list');
+    const countBadge = document.getElementById('browser-plan-count');
+    if (!list) return;
+
+    const planLevels = levels.filter(l => l.hasPlanView !== false);
+    if (countBadge) {
+      countBadge.textContent = planLevels.length.toString();
+    }
+
+    list.innerHTML = '';
+
+    if (planLevels.length === 0) {
+      list.innerHTML = '<div class="text-[11px] text-slate-500 italic px-2 py-1 select-none">(Sin planos generados)</div>';
+    } else {
+      planLevels.forEach(lvl => {
+        const sign = lvl.elevation >= 0 ? '+' : '';
+        const formattedElev = `${sign}${lvl.elevation.toFixed(2)}m`;
+        const cleanName = lvl.name.split('(')[0].trim();
+        const viewId = `plan-${lvl.id}`;
+        const isActive = activeViewId === viewId;
+
+        const item = document.createElement('div');
+        item.className = `tree-item flex items-center justify-between gap-1.5 px-2 py-1 rounded text-xs cursor-pointer select-none transition-colors ${
+          isActive 
+            ? 'bg-sky-500/20 text-sky-300 font-semibold border-l-2 border-sky-400' 
+            : 'text-slate-300 hover:bg-white/5 hover:text-sky-400'
+        }`;
+        item.dataset.openView = viewId;
+        item.title = `Doble clic para abrir: Planta - ${cleanName} (${formattedElev})`;
+
+        item.innerHTML = `
+          <div class="flex items-center gap-1.5 truncate flex-1 pointer-events-none">
+            <span class="text-xs shrink-0">📐</span>
+            <span class="truncate">Planta - ${cleanName}</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400 shrink-0 font-normal">${formattedElev}</span>
+        `;
+
+        // Doble clic: abre la pestaña en el workspace de acuerdo al estándar Autodesk Revit
+        item.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          this.viewManager.openView(viewId);
+        });
+
+        // Clic simple: también abre/activa para una navegación ágil
+        item.addEventListener('click', () => {
+          this.viewManager.openView(viewId);
+        });
+
+        list.appendChild(item);
+      });
+    }
+
+    // Actualizar resaltado de vistas 3D y elevaciones fijas en el árbol
+    document.querySelectorAll<HTMLElement>('#sidebar-browser .tree-item[data-open-view]').forEach(item => {
+      const viewId = item.dataset.openView;
+      if (viewId && !viewId.startsWith('plan-')) {
+        const isActive = activeViewId === viewId;
+        item.classList.toggle('bg-sky-500/20', isActive);
+        item.classList.toggle('text-sky-300', isActive);
+        item.classList.toggle('font-semibold', isActive);
+        item.classList.toggle('border-l-2', isActive);
+        item.classList.toggle('border-sky-400', isActive);
+        item.classList.toggle('text-slate-300', !isActive);
+      }
     });
   }
 
@@ -220,6 +301,151 @@ export class Sidebar {
 
     document.getElementById('btn-delete-grid-prop')?.addEventListener('click', () => {
       onDelete(grid.id);
+      this.showEmptyProperties();
+    });
+
+    (document.querySelector('.sidebar-nav-btn[data-sidebar-tab="properties"]') as HTMLElement)?.click();
+  }
+
+  public showLevelProperties(
+    level: Level,
+    onUpdate: (updated: Level) => void,
+    onDelete: (id: string) => void
+  ): void {
+    this.currentElement = null;
+    this.currentGrid = null;
+
+    const shortName = level.name.split('(')[0]?.trim() || level.name;
+    const elevFormatted = level.elevation.toFixed(2);
+
+    this.propContent.innerHTML = `
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-sky-500/30 pb-2">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sky-400 font-bold text-sm">Nivel BIM</span>
+            <span class="text-[10px] bg-sky-950 text-sky-400 border border-sky-800 px-1.5 py-0.5 rounded font-mono">${LevelQuickGenerator.formatElevation(level.elevation)}</span>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono">${level.id}</span>
+        </div>
+
+        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Identidad</div>
+        <div class="flex justify-between items-center text-xs text-slate-400 py-1">
+          <span>Nombre de Nivel:</span>
+          <input id="lvl-name-input" type="text" value="${shortName}" class="w-28 px-2 py-0.5 bg-slate-950 border border-sky-500/40 rounded text-slate-100 text-xs font-bold text-center outline-none focus:border-sky-400" />
+        </div>
+
+        <div class="text-[10px] text-slate-400 uppercase font-bold mt-2 tracking-wider">Cota y Elevación</div>
+        <div class="flex justify-between items-center text-xs text-slate-400 py-1">
+          <span>Cota Global (Y):</span>
+          <div class="flex items-center gap-1">
+            <input id="lvl-elev-input" type="number" step="0.1" value="${elevFormatted}" class="w-20 px-2 py-0.5 bg-slate-950 border border-sky-500/40 rounded text-sky-400 text-xs font-mono font-bold text-center outline-none focus:border-sky-400" />
+            <span class="text-xs text-slate-400">m</span>
+          </div>
+        </div>
+        <div class="flex justify-between text-xs text-slate-400 py-0.5">
+          <span>Vista de Plano:</span>
+          <strong class="${level.hasPlanView ? 'text-sky-400' : 'text-slate-500'} font-medium">
+            ${level.hasPlanView ? 'Asociada (Cabezal Azul)' : 'Sin Vista (Cabezal Gris)'}
+          </strong>
+        </div>
+
+        <div class="text-[10px] text-slate-400 uppercase font-bold mt-2 tracking-wider">Cabezales y Burbujas</div>
+        <div class="flex flex-col gap-1 text-xs text-slate-300 py-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input id="lvl-prop-bubble-start" type="checkbox" ${level.showStartBubble ? 'checked' : ''} class="accent-sky-500 rounded" />
+            <span>Mostrar Cabezal en Extremo Inicial (Izquierda)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input id="lvl-prop-bubble-end" type="checkbox" ${level.showEndBubble ? 'checked' : ''} class="accent-sky-500 rounded" />
+            <span>Mostrar Cabezal en Extremo Final (Derecha)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer mt-1">
+            <input id="lvl-prop-locked" type="checkbox" ${level.isLocked ? 'checked' : ''} class="accent-sky-500 rounded" />
+            <span>🔒 Bloquear Alineación con Grupo (Revit Lock)</span>
+          </label>
+        </div>
+
+        <div class="text-[10px] text-slate-400 uppercase font-bold mt-2 tracking-wider">Codo / Quiebre (Level Elbow)</div>
+        <div class="flex flex-col gap-1.5 text-xs text-slate-300 py-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input id="lvl-prop-elbow-end" type="checkbox" ${level.endElbow?.active ? 'checked' : ''} class="accent-purple-500 rounded" />
+            <span>Quiebre de Hombro en Extremo Derecho</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input id="lvl-prop-elbow-start" type="checkbox" ${level.startElbow?.active ? 'checked' : ''} class="accent-purple-500 rounded" />
+            <span>Quiebre de Hombro en Extremo Izquierdo</span>
+          </label>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex flex-col gap-2">
+          <button id="btn-delete-lvl-prop" class="w-full py-1.5 px-3 bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 hover:text-red-200 text-xs font-semibold rounded cursor-pointer transition-colors flex items-center justify-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            <span>Eliminar Nivel</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    const nameInput = document.getElementById('lvl-name-input') as HTMLInputElement;
+    nameInput?.addEventListener('change', () => {
+      const val = nameInput.value.trim();
+      if (val) {
+        level.name = `${val} (${LevelQuickGenerator.formatElevation(level.elevation)})`;
+        onUpdate(level);
+      }
+    });
+
+    const elevInput = document.getElementById('lvl-elev-input') as HTMLInputElement;
+    elevInput?.addEventListener('change', () => {
+      const val = parseFloat(elevInput.value);
+      if (!isNaN(val)) {
+        level.elevation = Number(val.toFixed(2));
+        const pureName = level.name.split('(')[0]?.trim() || level.name;
+        level.name = `${pureName} (${LevelQuickGenerator.formatElevation(level.elevation)})`;
+        onUpdate(level);
+      }
+    });
+
+    const startCb = document.getElementById('lvl-prop-bubble-start') as HTMLInputElement;
+    startCb?.addEventListener('change', () => {
+      level.showStartBubble = startCb.checked;
+      onUpdate(level);
+    });
+
+    const endCb = document.getElementById('lvl-prop-bubble-end') as HTMLInputElement;
+    endCb?.addEventListener('change', () => {
+      level.showEndBubble = endCb.checked;
+      onUpdate(level);
+    });
+
+    const lockCb = document.getElementById('lvl-prop-locked') as HTMLInputElement;
+    lockCb?.addEventListener('change', () => {
+      level.isLocked = lockCb.checked;
+      onUpdate(level);
+    });
+
+    const startElbowCb = document.getElementById('lvl-prop-elbow-start') as HTMLInputElement;
+    startElbowCb?.addEventListener('change', () => {
+      if (!level.startElbow) {
+        level.startElbow = { active: startElbowCb.checked, verticalOffset: 0.8, breakDistance: 3.0 };
+      } else {
+        level.startElbow.active = startElbowCb.checked;
+      }
+      onUpdate(level);
+    });
+
+    const endElbowCb = document.getElementById('lvl-prop-elbow-end') as HTMLInputElement;
+    endElbowCb?.addEventListener('change', () => {
+      if (!level.endElbow) {
+        level.endElbow = { active: endElbowCb.checked, verticalOffset: 0.8, breakDistance: 3.0 };
+      } else {
+        level.endElbow.active = endElbowCb.checked;
+      }
+      onUpdate(level);
+    });
+
+    document.getElementById('btn-delete-lvl-prop')?.addEventListener('click', () => {
+      onDelete(level.id);
       this.showEmptyProperties();
     });
 

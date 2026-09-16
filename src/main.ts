@@ -8,6 +8,7 @@ import { StructuralManager } from './tools/StructuralManager';
 import { SelectionManager } from './tools/SelectionManager';
 import { PlacementPreview } from './tools/PlacementPreview';
 import { GridDrawingManager } from './tools/GridDrawingManager';
+import { LevelDrawingManager } from './tools/LevelDrawingManager';
 import { HeaderRibbon } from './ui/HeaderRibbon';
 import { ContextualSubheader } from './ui/ContextualSubheader';
 import { Sidebar } from './ui/Sidebar';
@@ -60,7 +61,10 @@ async function bootstrap() {
 
   const tabsBar = new ViewTabsBar(viewer.viewManager);
   viewer.viewManager.setCallbacks(
-    (activeView) => footer.setMessage(`Vista activa: ${activeView.title}`),
+    (activeView) => {
+      footer.setMessage(`Vista activa: ${activeView.title}`);
+      sidebar.updateProjectBrowser(levelSystem.getLevels(), activeView.id);
+    },
     (views, activeId) => tabsBar.renderTabs(views, activeId)
   );
 
@@ -73,6 +77,21 @@ async function bootstrap() {
     (msg) => footer.setMessage(msg)
   );
 
+  // Herramienta de Dibujo de Niveles Autodesk Revit Style
+  const levelDrawingManager = new LevelDrawingManager(
+    viewer.scene,
+    levelSystem,
+    () => viewer.viewManager.getActiveView(),
+    (msg) => footer.setMessage(msg)
+  );
+
+  // Sincronización reactiva del sistema de niveles con el gestor de vistas y navegador de proyectos
+  levelSystem.onLevelsChanged = (levels) => {
+    updateRibbonLevelSelector();
+    viewer.viewManager.syncPlanViews(levels);
+    sidebar.updateProjectBrowser(levels, viewer.viewManager.activeViewId);
+  };
+
   // REGLAS DE VISIBILIDAD POR VISTA:
   // Grillas: Ocultas en vista 3D, visibles únicamente en vistas 2D de planta.
   // Niveles: Visibles en vista 3D y elevaciones.
@@ -81,6 +100,7 @@ async function bootstrap() {
     gridSystem.group.visible = isPlan;
     gridDrawingManager.previewGroup.visible = isPlan;
     levelSystem.group.visible = (view.type === '3d' || view.type === 'elevation');
+    levelDrawingManager.previewGroup.visible = (view.type === '3d' || view.type === 'elevation');
   };
 
   // Helper para mantener sincronizado el selector de niveles del ribbon superior
@@ -89,6 +109,15 @@ async function bootstrap() {
     if (!sel) return;
     const currentLevels = levelSystem.getLevels();
     sel.innerHTML = '';
+
+    if (currentLevels.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '-1';
+      opt.textContent = '(Sin niveles - Usa Quick Generate o Dibuja)';
+      sel.appendChild(opt);
+      return;
+    }
+
     currentLevels.forEach((lvl, idx) => {
       const opt = document.createElement('option');
       opt.value = idx.toString();
@@ -132,12 +161,15 @@ async function bootstrap() {
     },
     // Acciones de Niveles (Niveles Revit)
     onLevelDrawModeChange: (mode) => {
+      levelDrawingManager.setMode(mode);
       footer.setMessage(`Modo colocación nivel: ${mode === 'line' ? 'Línea (2 clics horizontal en alzado)' : 'Pick Line (Desfase desde nivel existente)'}`);
     },
     onLevelOffsetChange: (offset) => {
+      levelDrawingManager.setOffset(offset);
       footer.setMessage(`Desfase de nivel: ${offset.toFixed(2)}m`);
     },
     onLevelMakePlanViewChange: (makePlan) => {
+      levelDrawingManager.setMakePlanView(makePlan);
       footer.setMessage(`Crear vista de plano de planta asociada: ${makePlan ? 'Activado' : 'Desactivado'}`);
     },
     onApplyLevelTemplate: (template) => {
@@ -170,6 +202,7 @@ async function bootstrap() {
     onClearSelection: () => {
       selection.clearSelection();
       gridSystem.selectGrid(null);
+      levelSystem.selectLevel(null);
       sidebar.showEmptyProperties();
       footer.setMessage('Selección limpiada.');
     },
@@ -179,6 +212,12 @@ async function bootstrap() {
         gridSystem.deleteGrid(id);
         sidebar.showEmptyProperties();
         footer.setMessage(`Rejilla ${id} eliminada.`);
+      } else if (levelSystem.selectedLevelId) {
+        const id = levelSystem.selectedLevelId;
+        levelSystem.deleteLevel(id);
+        updateRibbonLevelSelector();
+        sidebar.showEmptyProperties();
+        footer.setMessage(`Nivel ${id} eliminado.`);
       } else if (selection.selectedElement) {
         structural.removeElement(selection.selectedElement);
         selection.clearSelection();
@@ -204,15 +243,24 @@ async function bootstrap() {
       contextualBar.updateForTool(tool, levelName);
 
       if (tool === 'grid') {
-        // En Revit, las rejillas se dibujan en planta
+        // En Revit, las rejillas se dibujan en vistas de planta (Floor Plans)
         const activeView = viewer.viewManager.getActiveView();
         if (activeView.type !== 'plan') {
-          viewer.viewManager.openView('plan-1');
-          footer.setMessage('Cambiando a Vista de Planta Nivel 1 para dibujar rejillas.');
+          const levels = levelSystem.getLevels();
+          const activeLevel = levels[snapping.activeLevelIdx] || levels[0];
+          let targetPlanId = activeLevel ? `plan-${activeLevel.id}` : 'plan-lvl-1';
+          if (!viewer.viewManager.views.has(targetPlanId)) {
+            const firstPlan = viewer.viewManager.getAllViews().find(v => v.type === 'plan');
+            targetPlanId = firstPlan ? firstPlan.id : 'plan-lvl-1';
+          }
+          viewer.viewManager.openView(targetPlanId);
+          const newActiveView = viewer.viewManager.getActiveView();
+          footer.setMessage(`Abriendo vista de planta (${newActiveView.title}) para colocar rejillas.`);
         }
         gridDrawingManager.activate();
         gridDrawingManager.setOffset(contextualBar.currentOffset);
         gridDrawingManager.setChain(contextualBar.isChain);
+        levelDrawingManager.deactivate();
         selection.clearSelection();
         preview.hide();
         footer.setMessage('Herramienta Rejilla activa: Clic en planta para trazar ejes.');
@@ -220,16 +268,28 @@ async function bootstrap() {
         gridDrawingManager.deactivate();
         preview.hide();
         selection.clearSelection();
-        // En Revit, los niveles se crean en vistas de alzado o sección
+        gridSystem.selectGrid(null);
+        // En Revit, los niveles se crean exclusivamente en vistas ortográficas de alzado o sección
         const activeView = viewer.viewManager.getActiveView();
-        if (activeView.type === 'plan') {
-          viewer.viewManager.openView('elev-south');
-          footer.setMessage('Cambiando a Vista de Alzado Sur para trabajar con Niveles.');
+        if (activeView.type !== 'elevation') {
+          let targetElevId = 'elev-south';
+          if (!viewer.viewManager.views.has(targetElevId)) {
+            const firstElev = viewer.viewManager.getAllViews().find(v => v.type === 'elevation');
+            targetElevId = firstElev ? firstElev.id : 'elev-south';
+          }
+          viewer.viewManager.openView(targetElevId);
+          const newActiveView = viewer.viewManager.getActiveView();
+          footer.setMessage(`Abriendo vista de alzado (${newActiveView.title}) para trazar niveles.`);
         } else {
-          footer.setMessage('Herramienta Nivel activa (LL): Usa Quick Generate o dibuja cotas en alzado.');
+          footer.setMessage('Herramienta Nivel activa (LL): Haz 2 clics para trazar un nivel o usa Quick Generate.');
         }
+        levelDrawingManager.activate();
+        levelDrawingManager.setMode(contextualBar.levelDrawMode);
+        levelDrawingManager.setOffset(contextualBar.levelOffset);
+        levelDrawingManager.setMakePlanView(contextualBar.levelMakePlanView);
       } else {
         gridDrawingManager.deactivate();
+        levelDrawingManager.deactivate();
         if (tool === 'select') {
           preview.hide();
           gridSystem.clearHighlight();
@@ -239,6 +299,7 @@ async function bootstrap() {
           selection.clearSelection();
           selection.clearHover();
           gridSystem.selectGrid(null);
+          levelSystem.selectLevel(null);
           footer.setMessage(`Herramienta activa: ${tool.toUpperCase()} (Previsualización activa)`);
         }
       }
@@ -265,9 +326,12 @@ async function bootstrap() {
     () => {
       structural.clear();
       gridSystem.clear();
+      levelSystem.resetToDefault();
+      viewer.viewManager.initDefaultViews();
       selection.clearSelection();
       sidebar.showEmptyProperties();
-      footer.setMessage('Escena limpiada por completo.');
+      sidebar.updateProjectBrowser(levelSystem.getLevels(), viewer.viewManager.activeViewId);
+      footer.setMessage('Proyecto restablecido al estándar Revit por defecto (1 Vista 3D, 1 Nivel, 4 Alzados).');
     },
     (style) => structural.setVisualStyle(style, viewer, gridSystem),
     () => gridSystem.toggleQuick(),
@@ -279,7 +343,8 @@ async function bootstrap() {
   );
 
   updateRibbonLevelSelector();
-  contextualBar.updateForTool('select', LEVELS[snapping.activeLevelIdx]?.name || 'Nivel 1 (+3.50m)');
+  sidebar.updateProjectBrowser(levelSystem.getLevels(), viewer.viewManager.activeViewId);
+  contextualBar.updateForTool('select', LEVELS[snapping.activeLevelIdx]?.name || 'Nivel 1 (0.00 m)');
   structural.setVisualStyle('hidden_line', viewer, gridSystem);
 
   // Sincronizar propiedades en barra lateral si se renombra un eje inline
@@ -321,6 +386,45 @@ async function bootstrap() {
     return null;
   }
 
+  function getElevationPlaneIntersection(e: MouseEvent): THREE.Vector3 | null {
+    const activeView = viewer.viewManager.getActiveView();
+    if (!activeView) return null;
+    const rect = activeView.domElement.getBoundingClientRect();
+    if (
+      e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top || e.clientY > rect.bottom
+    ) {
+      return null;
+    }
+    const mouse = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(mouse, activeView.camera);
+
+    let viewPlane: THREE.Plane;
+    if (activeView.id === 'elev-east') {
+      viewPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+    } else if (activeView.type === 'elevation' || activeView.id === 'elev-south') {
+      viewPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    } else if (activeView.type === '3d') {
+      const camDir = new THREE.Vector3();
+      activeView.camera.getWorldDirection(camDir);
+      camDir.y = 0;
+      if (camDir.lengthSq() < 0.001) camDir.set(0, 0, -1);
+      camDir.normalize();
+      viewPlane = new THREE.Plane(camDir.clone().negate(), 0);
+    } else {
+      viewPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    }
+
+    const pt = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(viewPlane, pt)) {
+      return pt;
+    }
+    return null;
+  }
+
   // Pointerdown: Detección de agarre de Grip para redimensionamiento grupal alineado y codos
   window.addEventListener('pointerdown', (e) => {
     const target = e.target as HTMLElement;
@@ -335,16 +439,55 @@ async function bootstrap() {
     }
 
     const activeView = viewer.viewManager.getActiveView();
-    if (activeView.type !== 'plan') return;
+    if (!activeView) return;
 
     const rect = activeView.domElement.getBoundingClientRect();
+    if (
+      e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top || e.clientY > rect.bottom
+    ) {
+      return;
+    }
+
     const mouse = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
     raycaster.setFromCamera(mouse, activeView.camera);
 
-    // 1. Verificar si se hizo clic en un Grip de Codo (Elbow Grip)
+    // Si estamos en Alzado o 3D, verificar agarre de grips y codos de NIVELES
+    if (activeView.type === 'elevation' || activeView.type === '3d') {
+      // 1. Verificar si se hizo clic en un Grip de Codo de Nivel (Elbow Grip)
+      const lvlElbowMeshes = levelSystem.elbowGrips.map(g => g.mesh);
+      const lvlElbowHits = raycaster.intersectObjects(lvlElbowMeshes);
+      if (lvlElbowHits.length > 0) {
+        const hitData = lvlElbowHits[0].object.userData as { levelId: string; end: 'start' | 'end' };
+        if (hitData) {
+          levelSystem.startElbowDrag(hitData.levelId, hitData.end);
+          footer.setMessage('Arrastrando codo de nivel (Ajuste de altura del quiebre activo)');
+          e.stopPropagation();
+          return;
+        }
+      }
+
+      // 2. Verificar si se hizo clic en un Grip estándar de Nivel (alargar / achicar nivel)
+      const lvlGripMeshes = levelSystem.grips.map(g => g.mesh);
+      const lvlGripHits = raycaster.intersectObjects(lvlGripMeshes);
+      if (lvlGripHits.length > 0) {
+        const hitData = lvlGripHits[0].object.userData as { levelId: string; end: 'start' | 'end' };
+        if (hitData) {
+          levelSystem.startGripDrag(hitData.levelId, hitData.end);
+          footer.setMessage('Arrastrando extremo de nivel (Ajuste de longitud activo)');
+          e.stopPropagation();
+          return;
+        }
+      }
+      return;
+    }
+
+    if (activeView.type !== 'plan') return;
+
+    // 1. Verificar si se hizo clic en un Grip de Codo de Rejilla (Elbow Grip)
     const elbowGripMeshes = gridSystem.elbowGrips.map(g => g.mesh);
     const elbowHits = raycaster.intersectObjects(elbowGripMeshes);
     if (elbowHits.length > 0) {
@@ -375,7 +518,24 @@ async function bootstrap() {
 
   // Pointermove
   window.addEventListener('pointermove', (e) => {
-    // 1. Arrastre de Grip estándar
+    // 0. Arrastre de Grips de Niveles (alargar / achicar y mover codos)
+    if (levelSystem.isDraggingGrip) {
+      const pt = getElevationPlaneIntersection(e);
+      if (pt) {
+        levelSystem.updateGripDrag(pt);
+      }
+      return;
+    }
+
+    if (levelSystem.isDraggingElbowGrip) {
+      const pt = getElevationPlaneIntersection(e);
+      if (pt) {
+        levelSystem.updateElbowDrag(pt);
+      }
+      return;
+    }
+
+    // 1. Arrastre de Grip estándar de Rejilla
     if (gridSystem.isDraggingGrip) {
       const pt = getPlaneIntersection(e);
       if (pt) {
@@ -384,7 +544,7 @@ async function bootstrap() {
       return;
     }
 
-    // 1.1 Arrastre de Grip de Codo
+    // 1.1 Arrastre de Grip de Codo de Rejilla
     if (gridSystem.isDraggingElbowGrip) {
       const pt = getPlaneIntersection(e);
       if (pt) {
@@ -399,11 +559,25 @@ async function bootstrap() {
       return;
     }
 
+    // 2.1 Modo Dibujo de Nivel
+    if (ribbon.activeTool === 'level') {
+      levelDrawingManager.handlePointerMove(e);
+      return;
+    }
+
     // 3. Selección y Snapping Estructural
     selection.handlePointerMove(e);
 
-    // 4. Hover y previsualización de Rejillas en modo Selección
+    // 4. Hover y previsualización de Rejillas y Niveles en modo Selección
     if (ribbon.activeTool === 'select') {
+      // Prioridad Estándar Revit: Si el cursor está sobre un elemento estructural (viga, columna, zapata, losa),
+      // no se resalta la rejilla ni el nivel subyacente.
+      if (selection.hoveredElement) {
+        gridSystem.setHoveredGrid(null);
+        levelSystem.setHoveredLevel(null);
+        return;
+      }
+
       const activeView = viewer.viewManager.getActiveView();
       if (activeView.type === 'plan') {
         const rect = activeView.domElement.getBoundingClientRect();
@@ -460,14 +634,71 @@ async function bootstrap() {
             document.body.style.cursor = 'default';
           }
         }
+      } else if (activeView.type === 'elevation' || activeView.type === '3d') {
+        const rect = activeView.domElement.getBoundingClientRect();
+        if (
+          e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom
+        ) {
+          const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+          );
+          raycaster.setFromCamera(mouse, activeView.camera);
+
+          // Controles de codo, grips y burbuja de niveles
+          const lvlGripMeshes = levelSystem.grips.map(g => g.mesh);
+          const lvlElbowGripMeshes = levelSystem.elbowGrips.map(g => g.mesh);
+          const lvlToggleMeshes = [
+            ...levelSystem.elbowToggles.map(t => t.mesh),
+            ...levelSystem.bubbleToggles.map(t => t.mesh),
+            ...lvlGripMeshes,
+            ...lvlElbowGripMeshes,
+          ];
+          const controlHits = raycaster.intersectObjects(lvlToggleMeshes);
+
+          const lvlHits = raycaster.intersectObjects([
+            ...levelSystem.levelHitMeshes,
+            ...levelSystem.headsGroup.children,
+          ]);
+          if (controlHits.length > 0) {
+            document.body.style.cursor = 'pointer';
+          } else if (lvlHits.length > 0) {
+            const hId = lvlHits[0].object.userData?.levelId || null;
+            levelSystem.setHoveredLevel(hId);
+            document.body.style.cursor = 'pointer';
+          } else {
+            // Detección directa de raycast sobre las líneas dasheadas de niveles
+            const lvlLines = levelSystem.getLineMeshes();
+            raycaster.params.Line = { threshold: 1.0 };
+            const lineHits = raycaster.intersectObjects(lvlLines);
+            if (lineHits.length > 0) {
+              const hId = lineHits[0].object.userData?.levelId || lineHits[0].object.name || null;
+              levelSystem.setHoveredLevel(hId);
+              document.body.style.cursor = 'pointer';
+            } else {
+              levelSystem.setHoveredLevel(null);
+              if (!selection.hoveredElement) {
+                document.body.style.cursor = 'default';
+              }
+            }
+          }
+        } else {
+          levelSystem.setHoveredLevel(null);
+          if (!selection.hoveredElement) {
+            document.body.style.cursor = 'default';
+          }
+        }
       } else {
         gridSystem.setHoveredGrid(null);
+        levelSystem.setHoveredLevel(null);
         if (!selection.hoveredElement) {
           document.body.style.cursor = 'default';
         }
       }
     } else {
       gridSystem.setHoveredGrid(null);
+      levelSystem.setHoveredLevel(null);
     }
 
     if (snapping.currentSnappedPosition && ribbon.activeTool !== 'select') {
@@ -493,6 +724,17 @@ async function bootstrap() {
 
   // Pointerup
   window.addEventListener('pointerup', () => {
+    // 0. Finalizar arrastre de Grip o Codo de Nivel
+    if (levelSystem.isDraggingGrip) {
+      levelSystem.endGripDrag();
+      footer.setMessage('Longitud de nivel ajustada.');
+    }
+    if (levelSystem.isDraggingElbowGrip) {
+      levelSystem.endElbowDrag();
+      footer.setMessage('Codo de nivel ajustado.');
+    }
+
+    // 1. Finalizar arrastre de Grip o Codo de Rejilla
     if (gridSystem.isDraggingGrip) {
       gridSystem.endGripDrag();
       footer.setMessage('Alineación de rejilla completada.');
@@ -518,7 +760,7 @@ async function bootstrap() {
     }
 
     const activeView = viewer.viewManager.getActiveView();
-    if (activeView.type !== 'plan') return;
+    if (!activeView) return;
 
     const rect = activeView.domElement.getBoundingClientRect();
     if (
@@ -533,6 +775,49 @@ async function bootstrap() {
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
     raycaster.setFromCamera(mouse, activeView.camera);
+
+    // B. Doble clic en cabezal de Nivel (Edición In-Place de Nombre y Cota en Alzados y 3D)
+    if (activeView.type === 'elevation' || activeView.type === '3d') {
+      const bubbleMeshes = levelSystem.bubbleHits.map(b => b.mesh);
+      const hits = raycaster.intersectObjects(bubbleMeshes);
+      if (hits.length > 0) {
+        const hitData = hits[0].object.userData as { levelId?: string; end?: 'start' | 'end' };
+        if (hitData?.levelId) {
+          const hitBubble = levelSystem.bubbleHits.find(b => b.mesh === hits[0].object);
+          const worldPos = hitBubble ? hitBubble.worldPos : hits[0].point;
+          levelSystem.openInlineEditor(
+            hitData.levelId,
+            worldPos,
+            activeView.camera,
+            activeView.domElement,
+            () => {
+              updateRibbonLevelSelector();
+              const selLvl = levelSystem.getSelectedLevel();
+              if (selLvl) {
+                sidebar.showLevelProperties(
+                  selLvl,
+                  () => {
+                    levelSystem.rebuildMeshes();
+                    updateRibbonLevelSelector();
+                  },
+                  (id) => {
+                    levelSystem.deleteLevel(id);
+                    updateRibbonLevelSelector();
+                  }
+                );
+              }
+              footer.setMessage('Nivel actualizado correctamente.');
+            },
+            (warning) => footer.setMessage(warning)
+          );
+          e.stopPropagation();
+          return;
+        }
+      }
+      return;
+    }
+
+    if (activeView.type !== 'plan') return;
 
     const bubbleMeshes = gridSystem.bubbleHits.map(b => b.mesh);
     const bubbleSprites = gridSystem.bubbleSprites;
@@ -618,7 +903,16 @@ async function bootstrap() {
       if (handled) return;
     }
 
-    // 2. Interacción de Selección de Rejilla y Toggles de Burbujas en Vistas de Planta
+    // 1.1 Si está en modo dibujo de nivel
+    if (ribbon.activeTool === 'level') {
+      const handled = levelDrawingManager.handlePointerClick(e);
+      if (handled) {
+        updateRibbonLevelSelector();
+        return;
+      }
+    }
+
+    // 2. Toggles interactivos de Burbujas y Codos (Checkbox y Elbows de Rejillas y Niveles)
     if (activeView.type === 'plan') {
       const rect = activeView.domElement.getBoundingClientRect();
       const mouse = new THREE.Vector2(
@@ -676,9 +970,93 @@ async function bootstrap() {
           return;
         }
       }
+    } else if (activeView.type === 'elevation' || activeView.type === '3d') {
+      const rect = activeView.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, activeView.camera);
 
-      // B. Comprobar si se hizo clic en una línea de rejilla o burbuja
-      if (ribbon.activeTool === 'select') {
+      // A. Clic en Checkbox de Cabezal de Nivel
+      const toggleMeshes = levelSystem.bubbleToggles.map(t => t.mesh);
+      const toggleHits = raycaster.intersectObjects(toggleMeshes);
+      if (toggleHits.length > 0) {
+        const hitToggle = toggleHits[0].object;
+        const toggleData = hitToggle.userData as { levelId: string; end: 'start' | 'end' };
+        if (toggleData) {
+          levelSystem.toggleBubble(toggleData.levelId, toggleData.end);
+          const lvl = levelSystem.getSelectedLevel();
+          if (lvl) {
+            sidebar.showLevelProperties(
+              lvl,
+              (updated) => {
+                levelSystem.rebuildMeshes();
+                updateRibbonLevelSelector();
+              },
+              (id) => {
+                levelSystem.deleteLevel(id);
+                updateRibbonLevelSelector();
+              }
+            );
+          }
+          footer.setMessage(`Cabezal de nivel ${toggleData.end === 'start' ? 'inicial' : 'final'} alternado.`);
+          return;
+        }
+      }
+
+      // A.2 Clic en Icono de Codo (Elbow) de Nivel
+      const elbowToggleMeshes = levelSystem.elbowToggles.map(t => t.mesh);
+      const elbowHits = raycaster.intersectObjects(elbowToggleMeshes);
+      if (elbowHits.length > 0) {
+        const hitElbow = elbowHits[0].object;
+        const elbowData = hitElbow.userData as { levelId: string; end: 'start' | 'end' };
+        if (elbowData) {
+          levelSystem.toggleElbow(elbowData.levelId, elbowData.end);
+          const lvl = levelSystem.getSelectedLevel();
+          if (lvl) {
+            sidebar.showLevelProperties(
+              lvl,
+              (updated) => {
+                levelSystem.rebuildMeshes();
+                updateRibbonLevelSelector();
+              },
+              (id) => {
+                levelSystem.deleteLevel(id);
+                updateRibbonLevelSelector();
+              }
+            );
+          }
+          footer.setMessage(`Codo de nivel ${elbowData.end === 'start' ? 'inicial' : 'final'} alternado.`);
+          return;
+        }
+      }
+    }
+
+    // 3. PRIORIDAD REVIT MODEL-FIRST: Selección de Elementos Estructurales
+    // Si el usuario hace clic sobre una viga, columna, losa o zapata, el elemento del modelo
+    // tiene prioridad absoluta sobre las líneas o planos de referencia subyacentes (rejillas o niveles).
+    if (ribbon.activeTool === 'select') {
+      const didSelect = selection.handlePointerClick(e);
+      if (didSelect) {
+        gridSystem.selectGrid(null);
+        levelSystem.selectLevel(null);
+        return;
+      }
+    }
+
+    // 4. SELECCIÓN DE ELEMENTOS DE REFERENCIA (DATUM: REJILLAS Y NIVELES)
+    // Solo se evalúa si el usuario NO hizo clic sobre ningún elemento estructural del modelo.
+    if (ribbon.activeTool === 'select') {
+      const rect = activeView.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, activeView.camera);
+
+      // 4.1 Comprobar si se hizo clic en una línea de rejilla o burbuja (solo en vistas de planta)
+      if (activeView.type === 'plan') {
         const hitMeshes = gridSystem.gridHitMeshes;
         const meshHits = raycaster.intersectObjects(hitMeshes);
         let selectedGridId: string | null = null;
@@ -696,6 +1074,7 @@ async function bootstrap() {
 
         if (selectedGridId) {
           gridSystem.selectGrid(selectedGridId);
+          levelSystem.selectLevel(null);
           selection.clearSelection();
 
           const selGrid = gridSystem.getSelectedGrid();
@@ -714,19 +1093,54 @@ async function bootstrap() {
           return;
         }
       }
-    }
 
-    // 3. Selección de Elementos Estructurales
-    const didSelect = selection.handlePointerClick(e);
-    if (didSelect) {
-      gridSystem.selectGrid(null);
-      return;
-    }
+      // 4.2 Comprobar si se hizo clic en un Nivel (en vistas de alzado o 3D)
+      if (activeView.type === 'elevation' || activeView.type === '3d') {
+        const lvlHits = raycaster.intersectObjects([
+          ...levelSystem.levelHitMeshes,
+          ...levelSystem.headsGroup.children,
+        ]);
+        let selectedLvlId: string | null = null;
 
-    // 4. Clic en espacio vacío en modo Selección
-    if (ribbon.activeTool === 'select') {
+        if (lvlHits.length > 0) {
+          selectedLvlId = (lvlHits[0].object.userData?.levelId as string) || null;
+        } else {
+          const lvlLines = levelSystem.getLineMeshes();
+          raycaster.params.Line = { threshold: 1.0 };
+          const lineHits = raycaster.intersectObjects(lvlLines);
+          if (lineHits.length > 0) {
+            selectedLvlId = (lineHits[0].object.userData?.levelId as string) || lineHits[0].object.name || null;
+          }
+        }
+
+        if (selectedLvlId) {
+          levelSystem.selectLevel(selectedLvlId);
+          gridSystem.selectGrid(null);
+          selection.clearSelection();
+
+          const selLvl = levelSystem.getSelectedLevel();
+          if (selLvl) {
+            sidebar.showLevelProperties(
+              selLvl,
+              (updated) => {
+                levelSystem.rebuildMeshes();
+                updateRibbonLevelSelector();
+              },
+              (id) => {
+                levelSystem.deleteLevel(id);
+                updateRibbonLevelSelector();
+              }
+            );
+            footer.setMessage(`Nivel seleccionado: ${selLvl.name}. Arrastra los círculos en los extremos para alargar/achicar, o el punto morado para mover el codo.`);
+          }
+          return;
+        }
+      }
+
+      // 4.3 Clic en espacio vacío en modo Selección: Deseleccionar todo
       selection.clearSelection();
       gridSystem.selectGrid(null);
+      levelSystem.selectLevel(null);
       sidebar.showEmptyProperties();
       return;
     }
@@ -747,11 +1161,13 @@ async function bootstrap() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       gridDrawingManager.cancelCurrentDraw();
+      levelDrawingManager.cancelCurrentDraw();
       ribbon.setTool('select');
       preview.hide();
       gridSystem.clearHighlight();
       gridSystem.hideGuideLine();
       gridSystem.selectGrid(null);
+      levelSystem.selectLevel(null);
       selection.clearSelection();
       sidebar.showEmptyProperties();
       footer.setMessage('Modo Selección | Listo');
@@ -771,6 +1187,12 @@ async function bootstrap() {
         gridSystem.deleteGrid(id);
         sidebar.showEmptyProperties();
         footer.setMessage(`Rejilla ${id} eliminada.`);
+      } else if (levelSystem.selectedLevelId) {
+        const id = levelSystem.selectedLevelId;
+        levelSystem.deleteLevel(id);
+        updateRibbonLevelSelector();
+        sidebar.showEmptyProperties();
+        footer.setMessage(`Nivel ${id} eliminado.`);
       } else if (selection.selectedElement) {
         structural.removeElement(selection.selectedElement);
         selection.clearSelection();

@@ -57,7 +57,16 @@ export class BimView {
         this.camera.position.set(80, 8.75, 0);
         this.controls = new OrbitControls(this.camera, this.domElement);
         this.controls.target.set(0, 8.75, 0);
+      } else if (this.id === 'elev-west') {
+        this.camera.position.set(-80, 8.75, 0);
+        this.controls = new OrbitControls(this.camera, this.domElement);
+        this.controls.target.set(0, 8.75, 0);
+      } else if (this.id === 'elev-north') {
+        this.camera.position.set(0, 8.75, -80);
+        this.controls = new OrbitControls(this.camera, this.domElement);
+        this.controls.target.set(0, 8.75, 0);
       } else {
+        // elev-south (Frontal por defecto)
         this.camera.position.set(0, 8.75, 80);
         this.controls = new OrbitControls(this.camera, this.domElement);
         this.controls.target.set(0, 8.75, 0);

@@ -63,16 +63,9 @@ export interface LevelInfo {
   elevation: number;
 }
 
-export const LEVELS: LevelInfo[] = [
-  { index: 0, name: 'Nivel 0: Terreno / Cimientos (0.00m)', elevation: 0.0 },
-  { index: 1, name: 'Nivel 1: Piso 1 (+3.50m)', elevation: 3.5 },
-  { index: 2, name: 'Nivel 2: Piso 2 (+7.00m)', elevation: 7.0 },
-  { index: 3, name: 'Nivel 3: Piso 3 (+10.50m)', elevation: 10.5 },
-  { index: 4, name: 'Nivel 4: Piso 4 (+14.00m)', elevation: 14.0 },
-  { index: 5, name: 'Nivel 5: Cubierta (+17.50m)', elevation: 17.5 },
-];
+export const LEVELS: LevelInfo[] = [];
 
-export const LEVELS_Y = LEVELS.map(l => l.elevation);
+export const LEVELS_Y: number[] = [];
 
 export function updateActiveLevels(newLevels: LevelInfo[]): void {
   LEVELS.length = 0;

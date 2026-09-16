@@ -53,25 +53,28 @@ export class SelectionManager {
     }
 
     const meshes = this.registry.getMeshes();
-    const intersects = this.raycaster.intersectObjects(meshes, false);
+    this.raycaster.params.Line = { threshold: 0.25 };
+    const intersects = this.raycaster.intersectObjects(meshes, true);
 
-    if (intersects.length > 0) {
-      const hitMesh = intersects[0].object as THREE.Mesh;
-      const element = this.registry.findByMesh(hitMesh);
+    for (const hit of intersects) {
+      const obj = hit.object;
+      const mesh = (obj instanceof THREE.Mesh ? obj : (obj.parent instanceof THREE.Mesh ? obj.parent : null));
+      if (mesh) {
+        const element = this.registry.findByMesh(mesh);
+        if (element) {
+          if (this.selectedElement === element) {
+            this.clearHover();
+            document.body.style.cursor = 'pointer';
+            return;
+          }
 
-      if (element) {
-        if (this.selectedElement === element) {
-          this.clearHover();
+          if (this.hoveredElement !== element) {
+            this.hoveredElement = element;
+            this.updateHoverHighlight(element.mesh);
+          }
           document.body.style.cursor = 'pointer';
           return;
         }
-
-        if (this.hoveredElement !== element) {
-          this.hoveredElement = element;
-          this.updateHoverHighlight(element.mesh);
-        }
-        document.body.style.cursor = 'pointer';
-        return;
       }
     }
 
@@ -82,15 +85,19 @@ export class SelectionManager {
     if (this.isOverUI(event) || !this.updateRaycaster(event)) return false;
 
     const meshes = this.registry.getMeshes();
-    const intersects = this.raycaster.intersectObjects(meshes, false);
+    this.raycaster.params.Line = { threshold: 0.25 };
+    const intersects = this.raycaster.intersectObjects(meshes, true);
 
-    if (intersects.length > 0) {
-      const hitMesh = intersects[0].object as THREE.Mesh;
-      const element = this.registry.findByMesh(hitMesh);
-      if (element) {
-        this.clearHover();
-        this.select(element);
-        return true;
+    for (const hit of intersects) {
+      const obj = hit.object;
+      const mesh = (obj instanceof THREE.Mesh ? obj : (obj.parent instanceof THREE.Mesh ? obj.parent : null));
+      if (mesh) {
+        const element = this.registry.findByMesh(mesh);
+        if (element) {
+          this.clearHover();
+          this.select(element);
+          return true;
+        }
       }
     }
 

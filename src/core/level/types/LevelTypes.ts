@@ -1,22 +1,29 @@
+import * as THREE from 'three';
+
 export interface LevelElbowData {
   active: boolean;
   verticalOffset: number; // Desplazamiento vertical en metros (+/- para separar etiquetas contiguas)
   breakDistance: number;  // Distancia horizontal donde ocurre el quiebre estilo hombro Revit
 }
 
-export interface LevelElement {
+export interface Level {
   id: string;
   name: string;
-  elevation: number; // Cota en metros (Y axis)
+  elevation: number; // Cota en metros (eje Y global del modelo)
   start: { x: number; z: number };
   end: { x: number; z: number };
   showStartBubble: boolean;
   showEndBubble: boolean;
   isLocked: boolean; // Candado de alineación con otros niveles (estilo Revit)
-  hasPlanView: boolean; // Si tiene vista de planta asociada (cabezal azul vs negro)
+  hasPlanView: boolean; // Si tiene vista de plano asociada (cabezal azul vs negro/gris)
   startElbow?: LevelElbowData;
   endElbow?: LevelElbowData;
 }
+
+/**
+ * Alias retrocompatible para el sistema de tipos existente
+ */
+export type LevelElement = Level;
 
 export type LevelDrawMode = 'line' | 'pick_lines';
 
@@ -44,4 +51,36 @@ export interface LevelTemplate {
   badge: string;
   description: string;
   config: QuickGenerateLevelConfig;
+}
+
+export interface LevelValidationResult {
+  valid: boolean;
+  error?: string;
+  suggestedName?: string;
+}
+
+export interface LevelBubbleHitProxy {
+  levelId: string;
+  end: 'start' | 'end';
+  mesh: THREE.Mesh;
+  worldPos: THREE.Vector3;
+}
+
+export interface LevelToggleHit {
+  levelId: string;
+  end: 'start' | 'end';
+  mesh: THREE.Mesh | THREE.Sprite;
+}
+
+export interface LevelElbowToggleHit {
+  levelId: string;
+  end: 'start' | 'end';
+  mesh: THREE.Mesh | THREE.Sprite;
+}
+
+export interface LevelGripHandle {
+  levelId: string;
+  end: 'start' | 'end';
+  mesh: THREE.Mesh;
+  position: THREE.Vector3;
 }

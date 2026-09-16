@@ -1,5 +1,5 @@
 import {
-  LevelElement,
+  Level,
   LevelTemplate,
   LevelTemplateType,
   QuickGenerateLevelConfig,
@@ -29,7 +29,7 @@ export const LEVEL_TEMPLATES: Record<LevelTemplateType, LevelTemplate> = {
     id: 'commercial',
     name: 'Comercial / Corporativo',
     badge: '2S + Lobby + 8P',
-    description: '2 Sótanos (-3.20m), Lobby de doble altura (5.00m) y 8 Pisos corporativos (3.80m)',
+    description: '2 Sótanos (-3.20m), Lobby de gran altura (5.00m) y 8 Pisos corporativos (3.80m)',
     config: {
       baseElevation: 0.0,
       basementCount: 2,
@@ -67,7 +67,7 @@ export const LEVEL_TEMPLATES: Record<LevelTemplateType, LevelTemplate> = {
     id: 'tower_10',
     name: 'Torre en Altura (10 Pisos)',
     badge: '2S + PB + 10P',
-    description: 'Torre urbana: 2 Sótanos (-3.00m), Planta Baja (4.50m) y 10 Pisos de departamentos (3.00m)',
+    description: 'Torre urbana: 2 Sótanos (-3.00m), Planta Baja (4.50m) y 10 Pisos típicos (3.00m)',
     config: {
       baseElevation: 0.0,
       basementCount: 2,
@@ -86,24 +86,26 @@ export const LEVEL_TEMPLATES: Record<LevelTemplateType, LevelTemplate> = {
 
 export class LevelQuickGenerator {
   /**
-   * Genera en lote un array de niveles (LevelElement) calculando cotas exactas,
+   * Genera en lote un array de niveles (Level) calculando cotas exactas,
    * etiquetas, nombres e inicializando elbows si los niveles son muy contiguos.
+   * Cada nivel generado es una entidad 100% independiente.
    */
   public static generate(
     config: QuickGenerateLevelConfig,
     halfExtent: number = 22.0
-  ): LevelElement[] {
-    const levels: LevelElement[] = [];
+  ): Level[] {
+    const levels: Level[] = [];
 
-    // 1. Sótanos (desde el más profundo hasta el primer sótano bajo tierra)
+    // 1. Sótanos (desde el más profundo hacia la cota base)
     if (config.basementCount > 0 && config.basementHeight > 0) {
       for (let b = config.basementCount; b >= 1; b--) {
-        const elev = config.baseElevation - b * config.basementHeight;
-        const name = `${config.prefixBasement} ${b}`;
+        const elev = Number((config.baseElevation - b * config.basementHeight).toFixed(2));
+        const prefix = config.prefixBasement || 'Sótano';
+        const name = `${prefix} ${b}`;
         levels.push({
-          id: `lvl-sub-${b}`,
+          id: `lvl-sub-${b}-${Date.now().toString(36)}`,
           name: `${name} (${this.formatElevation(elev)})`,
-          elevation: Number(elev.toFixed(2)),
+          elevation: elev,
           start: { x: -halfExtent, z: -halfExtent },
           end: { x: halfExtent, z: halfExtent },
           showStartBubble: true,
@@ -115,12 +117,12 @@ export class LevelQuickGenerator {
     }
 
     // 2. Planta Baja / Nivel Base
-    const groundElev = config.baseElevation;
-    const groundTitle = config.groundFloorName || 'Nivel 0: Planta Baja';
+    const groundElev = Number(config.baseElevation.toFixed(2));
+    const groundTitle = config.groundFloorName?.trim() || 'Planta Baja';
     levels.push({
-      id: 'lvl-0',
+      id: `lvl-0-${Date.now().toString(36)}`,
       name: `${groundTitle} (${this.formatElevation(groundElev)})`,
-      elevation: Number(groundElev.toFixed(2)),
+      elevation: groundElev,
       start: { x: -halfExtent, z: -halfExtent },
       end: { x: halfExtent, z: halfExtent },
       showStartBubble: true,
@@ -133,18 +135,20 @@ export class LevelQuickGenerator {
     let runningElevation = groundElev + (config.groundFloorHeight || 3.5);
     for (let u = 1; u <= config.upperFloorCount; u++) {
       const isRoof = u === config.upperFloorCount;
+      const elev = Number(runningElevation.toFixed(2));
       let label = '';
 
+      const prefix = config.prefixUpper || (config.namingPattern === 'floor' ? 'Piso' : 'Nivel');
       if (isRoof) {
-        label = `Cubierta / Techo (${this.formatElevation(runningElevation)})`;
+        label = `Cubierta / Techo (${this.formatElevation(elev)})`;
       } else {
-        label = `${config.prefixUpper} ${u} (${this.formatElevation(runningElevation)})`;
+        label = `${prefix} ${u} (${this.formatElevation(elev)})`;
       }
 
       levels.push({
-        id: `lvl-${u}`,
+        id: `lvl-${u}-${Date.now().toString(36)}`,
         name: label,
-        elevation: Number(runningElevation.toFixed(2)),
+        elevation: elev,
         start: { x: -halfExtent, z: -halfExtent },
         end: { x: halfExtent, z: halfExtent },
         showStartBubble: true,
@@ -174,7 +178,7 @@ export class LevelQuickGenerator {
       }
     }
 
-    // Ordenar de menor cota a mayor cota
+    // Ordenar de menor cota a mayor cota (ascendente)
     return levels.sort((a, b) => a.elevation - b.elevation);
   }
 
@@ -182,9 +186,9 @@ export class LevelQuickGenerator {
    * Formatea la cota de elevación para visualización CAD (+3.50 m, 0.00 m, -3.00 m)
    */
   public static formatElevation(elevation: number): string {
-    const fixed = elevation.toFixed(2);
-    if (elevation > 0) return `+${fixed} m`;
-    if (elevation === 0 || Math.abs(elevation) < 0.001) return '0.00 m';
+    const fixed = Math.abs(elevation) < 0.001 ? '0.00' : elevation.toFixed(2);
+    if (elevation > 0.001) return `+${fixed} m`;
+    if (Math.abs(elevation) <= 0.001) return '0.00 m';
     return `${fixed} m`;
   }
 
