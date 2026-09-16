@@ -83,6 +83,29 @@ export class ViewManager {
     }
   }
 
+  /**
+   * Sincroniza las vistas de plano asociadas con los niveles BIM creados
+   */
+  public syncPlanViews(levels: { id: string; name: string; elevation: number; hasPlanView?: boolean }[]): void {
+    levels.forEach((lvl, idx) => {
+      if (lvl.hasPlanView === false) return;
+      const viewId = `plan-${lvl.id || idx}`;
+      if (!this.views.has(viewId)) {
+        const sign = lvl.elevation >= 0 ? '+' : '';
+        const title = `Planta - ${lvl.name} (${sign}${lvl.elevation.toFixed(2)}m)`;
+        const newView = new BimView(viewId, title, 'plan', this.container, this.rendererDom, idx);
+        this.views.set(viewId, newView);
+        newView.domElement.addEventListener('pointerdown', () => {
+          this.setActiveView(viewId);
+        });
+      }
+    });
+
+    if (this.onTabsUpdated) {
+      this.onTabsUpdated(this.getAllViews(), this.activeViewId);
+    }
+  }
+
   private updatePanelClasses(): void {
     this.views.forEach(v => {
       const isActive = v.id === this.activeViewId;

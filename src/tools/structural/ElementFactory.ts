@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ElementCategory, ManagedElement } from './types';
 import { THEME, VisualStyle } from '../../config/theme.config';
+import { DIMENSIONS } from '../../config/dimensions.config';
 import { WasmBridge } from '../../kernel/WasmBridge';
 
 export class ElementFactory {
@@ -33,7 +34,7 @@ export class ElementFactory {
     });
 
     const line = new THREE.LineSegments(edges, lineMat);
-    line.renderOrder = mesh.renderOrder + 0.1;
+    line.renderOrder = mesh.renderOrder + DIMENSIONS.renderOrders.edgesOffset;
     mesh.add(line);
 
     return { mesh, line, type };
@@ -41,10 +42,10 @@ export class ElementFactory {
 
   public getRenderOrder(type: ElementCategory): number {
     switch (type) {
-      case 'footing': return 0;
-      case 'column':  return 1;
-      case 'beam':    return 2;
-      case 'slab':    return 3;
+      case 'footing': return DIMENSIONS.renderOrders.footing;
+      case 'column':  return DIMENSIONS.renderOrders.column;
+      case 'beam':    return DIMENSIONS.renderOrders.beam;
+      case 'slab':    return DIMENSIONS.renderOrders.slab;
     }
   }
 

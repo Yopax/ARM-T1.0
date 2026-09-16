@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GRID_X, GRID_Z, LEVELS_Y } from '../config/structural.config';
 import { THEME } from '../config/theme.config';
+import { DIMENSIONS } from '../config/dimensions.config';
 import { BimView } from '../core/views/BimView';
 
 export class SnappingManager {
@@ -19,7 +20,11 @@ export class SnappingManager {
     this.activeViewGetter = activeViewGetter;
 
     this.snapRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.8, 32).rotateX(-Math.PI / 2),
+      new THREE.RingGeometry(
+        DIMENSIONS.snapping.ringInnerRadius,
+        DIMENSIONS.snapping.ringOuterRadius,
+        DIMENSIONS.snapping.ringSegments
+      ).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: THEME.snapping.ring, side: THREE.DoubleSide })
     );
     this.snapRing.visible = false;
@@ -64,8 +69,8 @@ export class SnappingManager {
         );
 
         const dist = Math.hypot(this.intersectPoint.x - nearestX, this.intersectPoint.z - nearestZ);
-        if (dist < 2.5) {
-          this.snapRing.position.set(nearestX, levelElevation + 0.05, nearestZ);
+        if (dist < DIMENSIONS.snapping.snapDistanceThreshold) {
+          this.snapRing.position.set(nearestX, levelElevation + DIMENSIONS.snapping.ringHeightOffset, nearestZ);
           this.snapRing.visible = true;
           this.currentSnappedPosition = { x: nearestX, z: nearestZ };
         } else {
@@ -76,7 +81,7 @@ export class SnappingManager {
         // Cuadrícula libre (snap a 1 metro) si no hay rejillas definidas aún
         const snapX = Math.round(this.intersectPoint.x);
         const snapZ = Math.round(this.intersectPoint.z);
-        this.snapRing.position.set(snapX, levelElevation + 0.05, snapZ);
+        this.snapRing.position.set(snapX, levelElevation + DIMENSIONS.snapping.ringHeightOffset, snapZ);
         this.snapRing.visible = true;
         this.currentSnappedPosition = { x: snapX, z: snapZ };
       }

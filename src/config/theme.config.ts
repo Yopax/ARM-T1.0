@@ -16,7 +16,7 @@ export const THEME = {
 
   // 3. GRILLAS
   grids: {
-    baseCenter: 0x38bdf8,
+    baseCenter: 0x000000,
     baseLines: 0x334155,
     levelCenter: 0x64748b,
     levelLines: 0x334155,
@@ -24,6 +24,88 @@ export const THEME = {
   },
   snapping: {
     ring: 0x38bdf8,
+    ringCss: '#38bdf8',
+  },
+
+  // 3.1 REJILLAS Y EJES BIM (Grid System)
+  grid: {
+    bubbleRadius: 1.2,
+    bubbleColor: 0x0284c7,
+    textColor: 0xffffff,
+    lineDefault: 0x475569,
+    lineDefaultLight: 0x94a3b8,
+    lineActive: 0x0284c7,
+    lineHover: 0x00e5ff,
+    alignmentGuide: 0x38bdf8,
+    gripRing: 0x0284c7,
+    gripInner: 0x38bdf8,
+    elbowGripRing: 0x9333ea,
+    elbowGripInner: 0xc084fc,
+    elbowLeader: 0x0284c7,
+    hitbox: 0x000000,
+    bubble: {
+      fill: '#ffffff',
+      fillSelected: '#0284c7',
+      fillHover: '#f0f9ff',
+      borderDefault: '#1e293b',
+      borderSelected: '#38bdf8',
+      borderHover: '#0284c7',
+      textDefault: '#0f172a',
+      textSelected: '#ffffff',
+      textHover: '#0284c7',
+    },
+    checkbox: {
+      fillChecked: '#0284c7',
+      fillUnchecked: '#ffffff',
+      borderChecked: '#0369a1',
+      borderUnchecked: '#475569',
+      checkmark: '#ffffff',
+    },
+    elbowIcon: {
+      bg: '#ffffff',
+      strokeActive: '#0284c7',
+      strokeInactive: '#9333ea',
+    },
+    lockIcon: {
+      text: '#0f172a',
+    },
+    editor: {
+      background: '#ffffff',
+      text: '#0f172a',
+      border: '#0284c7',
+      borderError: '#ef4444',
+      shadow: '0 4px 20px rgba(2, 132, 199, 0.5), 0 0 0 4px rgba(56, 189, 248, 0.35)',
+      shadowError: '0 4px 16px rgba(239, 68, 68, 0.5)',
+    },
+  },
+
+  // 3.2 NIVELES Y DATUMS
+  levels: {
+    contourLine: 0x38bdf8,
+    datumPlane: 0x0284c7,
+    headCircle: '#0284c7',
+    headQuadrant: '#ffffff',
+    headStroke: '#0284c7',
+    headLine: '#38bdf8',
+    headTitleText: '#f8fafc',
+    headElevText: '#38bdf8',
+  },
+
+  // 3.3 PREVISUALIZACIÓN Y DIBUJO
+  preview: {
+    ghostSurface: 0x38bdf8,
+    ghostEdge: 0x0284c7,
+    drawingLine: 0x0284c7,
+    referenceLine: 0x94a3b8,
+    dimensionBackground: '#0f172a',
+    dimensionBorder: '#38bdf8',
+    dimensionText: '#38bdf8',
+  },
+
+  // 3.4 SELECCIÓN Y RESALTADO
+  selection: {
+    hoverBox: 0x38bdf8,
+    selectionBox: 0x0284c7,
   },
 
   // 4. ELEMENTOS ESTRUCTURALES (Modo Sombreado)
@@ -55,4 +137,6 @@ export const THEME = {
       background: 0x0f172a, // Fondo oscuro CAD
     }
   }
-};
+} as const;
+
+export type ThemeConfig = typeof THEME;

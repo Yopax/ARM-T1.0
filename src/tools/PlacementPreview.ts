@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { STRUCTURAL_SPECS, ToolType, LEVELS_Y } from '../config/structural.config';
+import { THEME } from '../config/theme.config';
+import { DIMENSIONS } from '../config/dimensions.config';
 import { JointResolver } from './JointResolver';
 
 export class PlacementPreview {
@@ -8,7 +10,7 @@ export class PlacementPreview {
   private line: THREE.LineSegments;
 
   private ghostMaterial = new THREE.MeshBasicMaterial({
-    color: 0x38bdf8,
+    color: THEME.preview.ghostSurface,
     transparent: true,
     opacity: 0.45,
     depthWrite: false,
@@ -16,7 +18,7 @@ export class PlacementPreview {
   });
 
   private ghostEdgeMaterial = new THREE.LineBasicMaterial({
-    color: 0x0284c7,
+    color: THEME.preview.ghostEdge,
     depthTest: false,
     linewidth: 2
   });
@@ -24,8 +26,8 @@ export class PlacementPreview {
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.ghostMaterial);
     this.line = new THREE.LineSegments(new THREE.BufferGeometry(), this.ghostEdgeMaterial);
-    this.line.renderOrder = 999;
-    this.mesh.renderOrder = 998;
+    this.line.renderOrder = DIMENSIONS.renderOrders.placementEdges;
+    this.mesh.renderOrder = DIMENSIONS.renderOrders.placementMesh;
 
     this.group.add(this.mesh);
     this.group.add(this.line);

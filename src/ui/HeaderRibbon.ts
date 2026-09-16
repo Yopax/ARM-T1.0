@@ -38,7 +38,7 @@ export class HeaderRibbon {
   }
 
   private bindToolButtons(): void {
-    const tools: ToolType[] = ['select', 'grid', 'zapata', 'columna', 'viga', 'techo'];
+    const tools: ToolType[] = ['select', 'grid', 'level', 'zapata', 'columna', 'viga', 'techo'];
     tools.forEach(tool => {
       const btn = document.getElementById(`tool-${tool}`);
       btn?.addEventListener('click', () => {
@@ -61,7 +61,7 @@ export class HeaderRibbon {
   }
 
   public setTool(tool: ToolType): void {
-    const tools: ToolType[] = ['select', 'grid', 'zapata', 'columna', 'viga', 'techo'];
+    const tools: ToolType[] = ['select', 'grid', 'level', 'zapata', 'columna', 'viga', 'techo'];
     tools.forEach(t => {
       const b = document.getElementById(`tool-${t}`);
       if (b) {

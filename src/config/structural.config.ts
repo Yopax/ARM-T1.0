@@ -74,6 +74,13 @@ export const LEVELS: LevelInfo[] = [
 
 export const LEVELS_Y = LEVELS.map(l => l.elevation);
 
+export function updateActiveLevels(newLevels: LevelInfo[]): void {
+  LEVELS.length = 0;
+  LEVELS.push(...newLevels);
+  LEVELS_Y.length = 0;
+  LEVELS_Y.push(...newLevels.map(l => l.elevation));
+}
+
 export const STRUCTURAL_SPECS = {
   column: { width: 0.40, depth: 0.40 },
   beam: { width: 0.40, height: 0.55 },
@@ -81,4 +88,4 @@ export const STRUCTURAL_SPECS = {
   footing: { width: 2.0, length: 2.0, height: 0.60 }
 };
 
-export type ToolType = 'select' | 'grid' | 'zapata' | 'columna' | 'viga' | 'techo';
+export type ToolType = 'select' | 'grid' | 'level' | 'zapata' | 'columna' | 'viga' | 'techo';

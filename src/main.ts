@@ -14,6 +14,7 @@ import { Sidebar } from './ui/Sidebar';
 import { ViewTabsBar } from './ui/ViewTabsBar';
 import { FooterStatusBar } from './ui/FooterStatusBar';
 import { LEVELS, LEVELS_Y } from './config/structural.config';
+import { DIMENSIONS } from './config/dimensions.config';
 
 async function bootstrap() {
   const viewer = new Viewer();
@@ -82,6 +83,27 @@ async function bootstrap() {
     levelSystem.group.visible = (view.type === '3d' || view.type === 'elevation');
   };
 
+  // Helper para mantener sincronizado el selector de niveles del ribbon superior
+  const updateRibbonLevelSelector = () => {
+    const sel = document.getElementById('ribbon-level-select') as HTMLSelectElement;
+    if (!sel) return;
+    const currentLevels = levelSystem.getLevels();
+    sel.innerHTML = '';
+    currentLevels.forEach((lvl, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx.toString();
+      const sign = lvl.elevation >= 0 ? '+' : '';
+      opt.textContent = `${lvl.name} (${sign}${lvl.elevation.toFixed(2)}m)`;
+      if (idx === snapping.activeLevelIdx) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    });
+    if (snapping.activeLevelIdx >= currentLevels.length) {
+      snapping.activeLevelIdx = Math.max(0, currentLevels.length - 1);
+    }
+  };
+
   // Subheader Contextual
   let contextualBar: ContextualSubheader;
   contextualBar = new ContextualSubheader({
@@ -107,6 +129,30 @@ async function bootstrap() {
     onQuickGenerate: (h, v, countX, countZ) => {
       gridSystem.quickGenerate(h, v, countX || 5, countZ || 5);
       footer.setMessage(`Rejilla generada: ${h}m × ${v}m (${countX || 5}x${countZ || 5} ejes)`);
+    },
+    // Acciones de Niveles (Niveles Revit)
+    onLevelDrawModeChange: (mode) => {
+      footer.setMessage(`Modo colocación nivel: ${mode === 'line' ? 'Línea (2 clics horizontal en alzado)' : 'Pick Line (Desfase desde nivel existente)'}`);
+    },
+    onLevelOffsetChange: (offset) => {
+      footer.setMessage(`Desfase de nivel: ${offset.toFixed(2)}m`);
+    },
+    onLevelMakePlanViewChange: (makePlan) => {
+      footer.setMessage(`Crear vista de plano de planta asociada: ${makePlan ? 'Activado' : 'Desactivado'}`);
+    },
+    onApplyLevelTemplate: (template) => {
+      const generated = levelSystem.applyTemplate(template);
+      updateRibbonLevelSelector();
+      viewer.viewManager.syncPlanViews(generated);
+      footer.setMessage(`Plantilla de niveles aplicada: ${template.toUpperCase()} (${generated.length} niveles generados)`);
+    },
+    onQuickGenerateLevels: (config) => {
+      const generated = levelSystem.quickGenerate(config);
+      updateRibbonLevelSelector();
+      if (config.createPlanViews) {
+        viewer.viewManager.syncPlanViews(generated);
+      }
+      footer.setMessage(`⚡ Quick Generate completado: Torre de ${generated.length} niveles generada con éxito.`);
     },
     onAtGrid: () => {
       const tool = ribbon.activeTool;
@@ -152,7 +198,7 @@ async function bootstrap() {
   let ribbon: HeaderRibbon;
   ribbon = new HeaderRibbon(
     (tool) => {
-      snapping.enabled = tool !== 'select' && tool !== 'grid';
+      snapping.enabled = tool !== 'select' && tool !== 'grid' && tool !== 'level';
       const levelName = LEVELS[snapping.activeLevelIdx]?.name || 'Nivel Activo';
 
       contextualBar.updateForTool(tool, levelName);
@@ -170,6 +216,18 @@ async function bootstrap() {
         selection.clearSelection();
         preview.hide();
         footer.setMessage('Herramienta Rejilla activa: Clic en planta para trazar ejes.');
+      } else if (tool === 'level') {
+        gridDrawingManager.deactivate();
+        preview.hide();
+        selection.clearSelection();
+        // En Revit, los niveles se crean en vistas de alzado o sección
+        const activeView = viewer.viewManager.getActiveView();
+        if (activeView.type === 'plan') {
+          viewer.viewManager.openView('elev-south');
+          footer.setMessage('Cambiando a Vista de Alzado Sur para trabajar con Niveles.');
+        } else {
+          footer.setMessage('Herramienta Nivel activa (LL): Usa Quick Generate o dibuja cotas en alzado.');
+        }
       } else {
         gridDrawingManager.deactivate();
         if (tool === 'select') {
@@ -220,6 +278,7 @@ async function bootstrap() {
     }
   );
 
+  updateRibbonLevelSelector();
   contextualBar.updateForTool('select', LEVELS[snapping.activeLevelIdx]?.name || 'Nivel 1 (+3.50m)');
   structural.setVisualStyle('hidden_line', viewer, gridSystem);
 
@@ -504,7 +563,7 @@ async function bootstrap() {
           const nearestBubble = gridSystem.bubbleHits
             .filter(b => b.gridId === hitData.gridId)
             .sort((a, b) => a.worldPos.distanceTo(hitPoint) - b.worldPos.distanceTo(hitPoint))[0];
-          if (nearestBubble && nearestBubble.worldPos.distanceTo(hitPoint) < 4.0) {
+          if (nearestBubble && nearestBubble.worldPos.distanceTo(hitPoint) < DIMENSIONS.grid.bubbleDoubleClickMaxDist) {
             targetGridId = nearestBubble.gridId;
             targetEnd = nearestBubble.end;
           }
@@ -696,6 +755,15 @@ async function bootstrap() {
       selection.clearSelection();
       sidebar.showEmptyProperties();
       footer.setMessage('Modo Selección | Listo');
+    }
+    const activeEl = document.activeElement;
+    const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+    if (!isTyping) {
+      if (e.key.toLowerCase() === 'l') {
+        ribbon.setTool('level');
+      } else if (e.key.toLowerCase() === 'g') {
+        ribbon.setTool('grid');
+      }
     }
     if ((e.key === 'Delete' || e.key === 'Backspace')) {
       if (gridSystem.selectedGridId) {

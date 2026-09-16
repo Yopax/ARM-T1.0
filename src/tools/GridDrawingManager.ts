@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GridDrawMode, GridElement, LEVELS_Y } from '../config/structural.config';
+import { THEME } from '../config/theme.config';
+import { DIMENSIONS } from '../config/dimensions.config';
 import { GridSystem } from '../core/GridSystem';
 import { BimView } from '../core/views/BimView';
 import { ElementRegistry } from './structural/ElementRegistry';
@@ -544,10 +546,10 @@ export class GridDrawingManager {
     ];
     const geom = new THREE.BufferGeometry().setFromPoints(pts);
     const mat = new THREE.LineDashedMaterial({
-      color: 0x0284c7,
-      dashSize: 0.6,
-      gapSize: 0.3,
-      linewidth: 2,
+      color: THEME.preview.drawingLine,
+      dashSize: DIMENSIONS.drawing.previewDashSize,
+      gapSize: DIMENSIONS.drawing.previewGapSize,
+      linewidth: DIMENSIONS.drawing.previewLineWidth,
     });
     this.previewLine = new THREE.Line(geom, mat);
     this.previewLine.computeLineDistances();
@@ -561,11 +563,11 @@ export class GridDrawingManager {
       ];
       const refGeom = new THREE.BufferGeometry().setFromPoints(refPts);
       const refMat = new THREE.LineDashedMaterial({
-        color: 0x94a3b8,
-        dashSize: 0.3,
-        gapSize: 0.3,
+        color: THEME.preview.referenceLine,
+        dashSize: DIMENSIONS.drawing.refDashSize,
+        gapSize: DIMENSIONS.drawing.refGapSize,
         transparent: true,
-        opacity: 0.6,
+        opacity: DIMENSIONS.drawing.refOpacity,
       });
       this.previewRefLine = new THREE.Line(refGeom, refMat);
       this.previewRefLine.computeLineDistances();
@@ -577,9 +579,9 @@ export class GridDrawingManager {
     this.previewEndBubble = this.gridSystem.createBubbleSprite(nextName, true);
     const dir = new THREE.Vector2().subVectors(lineSeg.p2, lineSeg.p1).normalize();
     this.previewEndBubble.position.set(
-      lineSeg.p2.x + dir.x * 1.8,
-      elev + 0.05,
-      lineSeg.p2.y + dir.y * 1.8
+      lineSeg.p2.x + dir.x * DIMENSIONS.grid.bubbleOffset,
+      elev + DIMENSIONS.grid.yOffsets.base,
+      lineSeg.p2.y + dir.y * DIMENSIONS.grid.bubbleOffset
     );
     this.previewGroup.add(this.previewEndBubble);
 
@@ -617,14 +619,14 @@ export class GridDrawingManager {
       0
     );
 
-    const pts2D = curve.getPoints(48);
+    const pts2D = curve.getPoints(DIMENSIONS.drawing.arcCurveSegments);
     const pts3D = pts2D.map(p => new THREE.Vector3(p.x, elev, p.y));
     const geom = new THREE.BufferGeometry().setFromPoints(pts3D);
     const mat = new THREE.LineDashedMaterial({
-      color: 0x0284c7,
-      dashSize: 0.5,
-      gapSize: 0.25,
-      linewidth: 2,
+      color: THEME.preview.drawingLine,
+      dashSize: DIMENSIONS.drawing.arcDashSize,
+      gapSize: DIMENSIONS.drawing.arcGapSize,
+      linewidth: DIMENSIONS.drawing.arcLineWidth,
     });
     this.previewArc = new THREE.Line(geom, mat);
     this.previewArc.computeLineDistances();
@@ -656,14 +658,14 @@ export class GridDrawingManager {
       0
     );
 
-    const pts2D = curve.getPoints(48);
+    const pts2D = curve.getPoints(DIMENSIONS.drawing.arcCurveSegments);
     const pts3D = pts2D.map(p => new THREE.Vector3(p.x, elev, p.y));
     const geom = new THREE.BufferGeometry().setFromPoints(pts3D);
     const mat = new THREE.LineDashedMaterial({
-      color: 0x0284c7,
-      dashSize: 0.5,
-      gapSize: 0.25,
-      linewidth: 2,
+      color: THEME.preview.drawingLine,
+      dashSize: DIMENSIONS.drawing.arcDashSize,
+      gapSize: DIMENSIONS.drawing.arcGapSize,
+      linewidth: DIMENSIONS.drawing.arcLineWidth,
     });
     this.previewArc = new THREE.Line(geom, mat);
     this.previewArc.computeLineDistances();
@@ -705,7 +707,7 @@ export class GridDrawingManager {
 
       edges.forEach(edge => {
         const dist = this.distPointToSegment(cursor, edge.start, edge.end);
-        if (dist < 4.0) candidates.push({ ...edge, dist });
+        if (dist < DIMENSIONS.drawing.pickLinesThreshold) candidates.push({ ...edge, dist });
       });
     });
 
@@ -715,7 +717,7 @@ export class GridDrawingManager {
         const s = new THREE.Vector2(grid.start.x, grid.start.z);
         const e = new THREE.Vector2(grid.end.x, grid.end.z);
         const dist = this.distPointToSegment(cursor, s, e);
-        if (dist < 4.0) candidates.push({ start: s, end: e, dist });
+        if (dist < DIMENSIONS.drawing.pickLinesThreshold) candidates.push({ start: s, end: e, dist });
       }
     });
 
@@ -749,10 +751,10 @@ export class GridDrawingManager {
     ];
     const geom = new THREE.BufferGeometry().setFromPoints(pts);
     const mat = new THREE.LineDashedMaterial({
-      color: 0x0284c7,
-      dashSize: 0.5,
-      gapSize: 0.25,
-      linewidth: 2,
+      color: THEME.preview.drawingLine,
+      dashSize: DIMENSIONS.drawing.arcDashSize,
+      gapSize: DIMENSIONS.drawing.arcGapSize,
+      linewidth: DIMENSIONS.drawing.arcLineWidth,
     });
     this.previewLine = new THREE.Line(geom, mat);
     this.previewLine.computeLineDistances();
@@ -802,23 +804,23 @@ export class GridDrawingManager {
 
   private createDimensionSprite(text: string): THREE.Sprite {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
+    canvas.width = DIMENSIONS.drawing.dimensionCanvasWidth;
+    canvas.height = DIMENSIONS.drawing.dimensionCanvasHeight;
     const ctx = canvas.getContext('2d')!;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = THEME.preview.dimensionBackground;
     ctx.beginPath();
-    ctx.roundRect(8, 8, 240, 48, 8);
+    ctx.roundRect(8, 8, 240, 48, DIMENSIONS.drawing.dimensionBoxRadius);
     ctx.fill();
 
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = DIMENSIONS.drawing.dimensionLineWidth;
+    ctx.strokeStyle = THEME.preview.dimensionBorder;
     ctx.stroke();
 
-    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillStyle = '#38bdf8';
+    ctx.font = `bold ${DIMENSIONS.drawing.dimensionFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.fillStyle = THEME.preview.dimensionText;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 128, 32);
@@ -827,8 +829,12 @@ export class GridDrawingManager {
     texture.minFilter = THREE.LinearFilter;
     const mat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(3.2, 0.8, 1);
-    sprite.renderOrder = 999;
+    sprite.scale.set(
+      DIMENSIONS.drawing.dimensionSpriteScale.x,
+      DIMENSIONS.drawing.dimensionSpriteScale.y,
+      DIMENSIONS.drawing.dimensionSpriteScale.z
+    );
+    sprite.renderOrder = DIMENSIONS.renderOrders.drawingDimension;
     return sprite;
   }
 

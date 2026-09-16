@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { THEME } from '../../../config/theme.config';
+import { DIMENSIONS } from '../../../config/dimensions.config';
 
 export interface InlineEditorOptions {
   worldPos: THREE.Vector3;
@@ -40,11 +42,14 @@ export class GridInlineEditor {
     const screenX = ((p.x + 1) / 2) * rect.width + rect.left;
     const screenY = ((-p.y + 1) / 2) * rect.height + rect.top;
 
+    const editorDims = DIMENSIONS.grid.controls.editor;
+    const editorTheme = THEME.grid.editor;
+
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentName;
     input.id = 'grid-inline-bubble-input';
-    input.maxLength = 5;
+    input.maxLength = editorDims.maxLength;
     input.spellcheck = false;
     input.autocomplete = 'off';
 
@@ -54,19 +59,19 @@ export class GridInlineEditor {
       left: `${screenX}px`,
       top: `${screenY}px`,
       transform: 'translate(-50%, -50%)',
-      width: '56px',
-      height: '56px',
-      borderRadius: '50%',
-      border: '3px solid #0284c7',
-      backgroundColor: '#ffffff',
-      color: '#0f172a',
-      fontSize: '22px',
+      width: `${editorDims.width}px`,
+      height: `${editorDims.height}px`,
+      borderRadius: editorDims.borderRadius,
+      border: `${editorDims.borderWidth}px solid ${editorTheme.border}`,
+      backgroundColor: editorTheme.background,
+      color: editorTheme.text,
+      fontSize: `${editorDims.fontSize}px`,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       fontWeight: 'bold',
       textAlign: 'center',
       outline: 'none',
-      boxShadow: '0 4px 20px rgba(2, 132, 199, 0.5), 0 0 0 4px rgba(56, 189, 248, 0.35)',
-      zIndex: '9999',
+      boxShadow: editorTheme.shadow,
+      zIndex: `${editorDims.zIndex}`,
       cursor: 'text',
       userSelect: 'text',
       padding: '0',
@@ -92,8 +97,8 @@ export class GridInlineEditor {
         if (isDuplicate) {
           onValidationWarning?.(`El nombre "${val}" ya está en uso por otro eje.`);
           // Advertencia visual
-          input.style.border = '3px solid #ef4444';
-          input.style.boxShadow = '0 4px 16px rgba(239, 68, 68, 0.5)';
+          input.style.border = `${editorDims.borderWidth}px solid ${editorTheme.borderError}`;
+          input.style.boxShadow = editorTheme.shadowError;
           this.isCommitting = false;
           return;
         }

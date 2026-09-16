@@ -1,4 +1,5 @@
 import { GridElement } from '../../../config/structural.config';
+import { DIMENSIONS } from '../../../config/dimensions.config';
 import { GridMath } from '../math/GridMath';
 import { AlignedDragItem } from '../types/GridTypes';
 
@@ -34,7 +35,7 @@ export class GridAlignmentHandler {
   public updateDrag(
     cursorPos: { x: number; z: number },
     elements: GridElement[],
-    minLength = 1.0
+    minLength: number = DIMENSIONS.grid.minSegmentLength
   ): { mainGrid: GridElement; alignedGroup: AlignedDragItem[]; activeEnd: 'start' | 'end' } | null {
     if (!this.isDraggingGrip || !this.activeDraggingGrip) return null;
 

@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Modelador Estructural BIM 3D</title>
-    <meta name="description" content="Modelador estructural BIM 3D con Three.js para diseño y análisis de pórticos, zapatas, columnas, vigas y losas." />
+    <meta name="description" content="Modelador estructural BIM 3D interactivo con Three.js para diseño y cálculo de pórticos, zapatas, columnas, vigas y losas." />
     <meta property="og:title" content="Modelador Estructural BIM 3D" />
-    <meta property="og:description" content="Modelador estructural BIM 3D con Three.js para diseño y análisis de pórticos, zapatas, columnas, vigas y losas." />
+    <meta property="og:description" content="Modelador estructural BIM 3D interactivo con Three.js para diseño y cálculo de pórticos, zapatas, columnas, vigas y losas." />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body class="bg-slate-900 text-slate-100 font-sans antialiased overflow-hidden">
@@ -32,7 +32,7 @@
               <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Selección</div>
             </div>
 
-            <!-- Grupo: Datum / Rejillas -->
+            <!-- Grupo: Datum / Rejillas y Niveles -->
             <div class="tool-group flex gap-1 px-2 border-r border-white/10 items-center relative pb-3.5">
               <button id="tool-grid" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-slate-200 border border-transparent hover:bg-white/5 hover:border-white/10" title="Rejilla / Ejes (GR)">
                 <span class="text-base">
@@ -48,6 +48,17 @@
                   </svg>
                 </span>
                 <span>Rejilla</span>
+              </button>
+              <button id="tool-level" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-slate-200 border border-transparent hover:bg-white/5 hover:border-white/10" title="Nivel / Alturas de Planta (LL)">
+                <span class="text-base">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <line x1="2" y1="12" x2="15" y2="12" stroke-dasharray="2 2" />
+                    <circle cx="18" cy="12" r="4.2" fill="#0284c7" stroke="#fff" stroke-width="1.5" />
+                    <path d="M18 7.8 A4.2 4.2 0 0 1 22.2 12 L18 12 Z" fill="#fff" />
+                    <path d="M18 12 L13.8 12 A4.2 4.2 0 0 1 18 16.2 Z" fill="#fff" />
+                  </svg>
+                </span>
+                <span>Nivel</span>
               </button>
               <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Datum</div>
             </div>

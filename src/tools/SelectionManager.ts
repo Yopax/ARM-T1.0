@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ManagedElement } from '../tools/structural/types';
 import { ElementRegistry } from '../tools/structural/ElementRegistry';
+import { THEME } from '../config/theme.config';
+import { DIMENSIONS } from '../config/dimensions.config';
 import { BimView } from '../core/views/BimView';
 
 export class SelectionManager {
@@ -129,10 +131,10 @@ export class SelectionManager {
       this.scene.remove(this.hoverBox);
       this.hoverBox.geometry.dispose();
     }
-    this.hoverBox = new THREE.BoxHelper(mesh, 0x38bdf8);
+    this.hoverBox = new THREE.BoxHelper(mesh, THEME.selection.hoverBox);
     const mat = this.hoverBox.material as THREE.LineBasicMaterial;
     mat.depthTest = false;
-    this.hoverBox.renderOrder = 998;
+    this.hoverBox.renderOrder = DIMENSIONS.renderOrders.selectionHover;
     this.scene.add(this.hoverBox);
   }
 
@@ -141,10 +143,10 @@ export class SelectionManager {
       this.scene.remove(this.selectionBox);
       this.selectionBox.geometry.dispose();
     }
-    this.selectionBox = new THREE.BoxHelper(mesh, 0x0284c7);
+    this.selectionBox = new THREE.BoxHelper(mesh, THEME.selection.selectionBox);
     const mat = this.selectionBox.material as THREE.LineBasicMaterial;
     mat.depthTest = false;
-    this.selectionBox.renderOrder = 999;
+    this.selectionBox.renderOrder = DIMENSIONS.renderOrders.selectionBox;
     this.scene.add(this.selectionBox);
   }
 

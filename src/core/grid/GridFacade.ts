@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GridAxis, GridElement, LEVELS_Y } from '../../config/structural.config';
 import { VisualStyle } from '../../config/theme.config';
+import { DIMENSIONS } from '../../config/dimensions.config';
 import { GridAlignmentHandler } from './interaction/GridAlignmentHandler';
 import { GridInlineEditor } from './interaction/GridInlineEditor';
 import { GridMath } from './math/GridMath';
@@ -274,8 +275,8 @@ export class GridFacade {
     } else {
       const elbowGeom = GridMath.computeElbowGeometry(grid);
       const pt = end === 'start' ? elbowGeom.startBubblePos : elbowGeom.endBubblePos;
-      const elev = (LEVELS_Y[this.state.activeLevelIdx] || 0) + 0.05;
-      worldPos = new THREE.Vector3(pt.x, elev + 0.02, pt.z);
+      const elev = (LEVELS_Y[this.state.activeLevelIdx] || 0) + DIMENSIONS.grid.yOffsets.base;
+      worldPos = new THREE.Vector3(pt.x, elev + DIMENSIONS.grid.yOffsets.bubble, pt.z);
     }
 
     this.inlineEditor.open({

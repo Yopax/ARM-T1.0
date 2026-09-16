@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GridElement, LEVELS_Y } from '../../../config/structural.config';
-import { VisualStyle } from '../../../config/theme.config';
+import { VisualStyle, THEME } from '../../../config/theme.config';
+import { DIMENSIONS } from '../../../config/dimensions.config';
 import { GridMath } from '../math/GridMath';
 import {
   AlignedDragItem,
@@ -67,13 +68,21 @@ export class GridRenderer {
     this.clearGripsAndToggles();
     this.clearElbows();
 
-    const elev = (LEVELS_Y[activeLevelIdx] || 0) + 0.05;
+    const elev = (LEVELS_Y[activeLevelIdx] || 0) + DIMENSIONS.grid.yOffsets.base;
 
     elements.forEach(grid => {
       const isSelected = selectedGridId === grid.id;
       const isHovered = hoveredGridId === grid.id;
-      const lineColor = isSelected ? 0x0284c7 : isHovered ? 0x00e5ff : 0x475569;
-      const lineWidth = isSelected ? 2.5 : isHovered ? 2.0 : 1.5;
+      const lineColor = isSelected
+        ? THEME.grid.lineActive
+        : isHovered
+        ? THEME.grid.lineHover
+        : THEME.grid.lineDefault;
+      const lineWidth = isSelected
+        ? DIMENSIONS.grid.lineWidthSelected
+        : isHovered
+        ? DIMENSIONS.grid.lineWidthHovered
+        : DIMENSIONS.grid.lineWidthDefault;
 
       let lineMesh: THREE.Line;
       const bubbleRecord: { start?: THREE.Sprite; end?: THREE.Sprite } = {};
@@ -87,8 +96,8 @@ export class GridRenderer {
         const geom = new THREE.BufferGeometry().setFromPoints(pts3D);
         const mat = new THREE.LineDashedMaterial({
           color: lineColor,
-          dashSize: 0.6,
-          gapSize: 0.3,
+          dashSize: DIMENSIONS.grid.dashSize,
+          gapSize: DIMENSIONS.grid.gapSize,
           linewidth: lineWidth,
           transparent: true,
           opacity: isSelected || isHovered ? 1.0 : 0.8,
@@ -107,31 +116,42 @@ export class GridRenderer {
           const segLen = Math.hypot(segDx, segDz);
           if (segLen > 0.05) {
             // Hitbox interactiva (2.2m de ancho para fácil detección de hover y clic)
-            const hitGeom = new THREE.PlaneGeometry(segLen + 0.5, 2.2);
+            const hitGeom = new THREE.PlaneGeometry(
+              segLen + DIMENSIONS.grid.hitboxLengthPadding,
+              DIMENSIONS.grid.hitboxWidth
+            );
             hitGeom.rotateX(-Math.PI / 2);
             const hitMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
             const hitMesh = new THREE.Mesh(hitGeom, hitMat);
-            hitMesh.position.set((pA.x + pB.x) / 2, elev + 0.03, (pA.z + pB.z) / 2);
+            hitMesh.position.set(
+              (pA.x + pB.x) / 2,
+              elev + DIMENSIONS.grid.yOffsets.hitbox,
+              (pA.z + pB.z) / 2
+            );
             hitMesh.rotation.y = -Math.atan2(segDz, segDx);
             hitMesh.userData = { isGridLineHit: true, gridId: grid.id };
             this.hitProxiesGroup.add(hitMesh);
             this.gridHitMeshes.push(hitMesh);
 
             // Resalte luminoso del tramo (Glow underlay debajo del dasheado)
-            const hlGeom = new THREE.PlaneGeometry(segLen, 0.45);
+            const hlGeom = new THREE.PlaneGeometry(segLen, DIMENSIONS.grid.glowWidth);
             hlGeom.rotateX(-Math.PI / 2);
             const hlMat = new THREE.MeshBasicMaterial({
-              color: isSelected ? 0x0284c7 : 0x00e5ff,
+              color: isSelected ? THEME.grid.lineActive : THEME.grid.lineHover,
               transparent: true,
               opacity: isSelected ? 0.4 : isHovered ? 0.55 : 0,
               depthTest: false,
               side: THREE.DoubleSide,
             });
             const hlMesh = new THREE.Mesh(hlGeom, hlMat);
-            hlMesh.position.set((pA.x + pB.x) / 2, elev - 0.005, (pA.z + pB.z) / 2);
+            hlMesh.position.set(
+              (pA.x + pB.x) / 2,
+              elev + DIMENSIONS.grid.yOffsets.glow,
+              (pA.z + pB.z) / 2
+            );
             hlMesh.rotation.y = -Math.atan2(segDz, segDx);
             hlMesh.visible = isSelected || isHovered;
-            hlMesh.renderOrder = 900;
+            hlMesh.renderOrder = DIMENSIONS.renderOrders.gridLine;
             this.highlightsGroup.add(hlMesh);
             hlMeshes.push(hlMesh);
           }
@@ -147,7 +167,11 @@ export class GridRenderer {
         // Burbuja inicio
         if (grid.showStartBubble) {
           const spStart = GridSprites.createBubbleSprite(grid.name, isSelected, isHovered);
-          spStart.position.set(elbowGeom.startBubblePos.x, elev + 0.02, elbowGeom.startBubblePos.z);
+          spStart.position.set(
+            elbowGeom.startBubblePos.x,
+            elev + DIMENSIONS.grid.yOffsets.bubble,
+            elbowGeom.startBubblePos.z
+          );
           spStart.userData = { isGridLineHit: true, isBubbleHit: true, gridId: grid.id, end: 'start' };
           this.bubblesGroup.add(spStart);
           this.bubbleSprites.push(spStart);
@@ -155,7 +179,7 @@ export class GridRenderer {
 
           const bHit = this.createBubbleHitMesh(
             elbowGeom.startBubblePos.x,
-            elev + 0.04,
+            elev + DIMENSIONS.grid.yOffsets.bubbleHit,
             elbowGeom.startBubblePos.z,
             grid.id,
             'start'
@@ -166,14 +190,22 @@ export class GridRenderer {
             gridId: grid.id,
             end: 'start',
             mesh: bHit,
-            worldPos: new THREE.Vector3(elbowGeom.startBubblePos.x, elev + 0.02, elbowGeom.startBubblePos.z),
+            worldPos: new THREE.Vector3(
+              elbowGeom.startBubblePos.x,
+              elev + DIMENSIONS.grid.yOffsets.bubble,
+              elbowGeom.startBubblePos.z
+            ),
           });
         }
 
         // Burbuja fin
         if (grid.showEndBubble) {
           const spEnd = GridSprites.createBubbleSprite(grid.name, isSelected, isHovered);
-          spEnd.position.set(elbowGeom.endBubblePos.x, elev + 0.02, elbowGeom.endBubblePos.z);
+          spEnd.position.set(
+            elbowGeom.endBubblePos.x,
+            elev + DIMENSIONS.grid.yOffsets.bubble,
+            elbowGeom.endBubblePos.z
+          );
           spEnd.userData = { isGridLineHit: true, isBubbleHit: true, gridId: grid.id, end: 'end' };
           this.bubblesGroup.add(spEnd);
           this.bubbleSprites.push(spEnd);
@@ -181,7 +213,7 @@ export class GridRenderer {
 
           const bHit = this.createBubbleHitMesh(
             elbowGeom.endBubblePos.x,
-            elev + 0.04,
+            elev + DIMENSIONS.grid.yOffsets.bubbleHit,
             elbowGeom.endBubblePos.z,
             grid.id,
             'end'
@@ -192,7 +224,11 @@ export class GridRenderer {
             gridId: grid.id,
             end: 'end',
             mesh: bHit,
-            worldPos: new THREE.Vector3(elbowGeom.endBubblePos.x, elev + 0.02, elbowGeom.endBubblePos.z),
+            worldPos: new THREE.Vector3(
+              elbowGeom.endBubblePos.x,
+              elev + DIMENSIONS.grid.yOffsets.bubble,
+              elbowGeom.endBubblePos.z
+            ),
           });
         }
 
@@ -236,13 +272,13 @@ export class GridRenderer {
           0
         );
 
-        const curvePts2D = curve.getPoints(64);
+        const curvePts2D = curve.getPoints(DIMENSIONS.grid.arcSegments);
         const curvePts3D = curvePts2D.map(p => new THREE.Vector3(p.x, elev, p.y));
         const geom = new THREE.BufferGeometry().setFromPoints(curvePts3D);
         const mat = new THREE.LineDashedMaterial({
           color: lineColor,
-          dashSize: 0.6,
-          gapSize: 0.3,
+          dashSize: DIMENSIONS.grid.dashSize,
+          gapSize: DIMENSIONS.grid.gapSize,
           linewidth: lineWidth,
           transparent: true,
           opacity: isSelected || isHovered ? 1.0 : 0.8,
@@ -260,30 +296,41 @@ export class GridRenderer {
           const segDz = pB.z - pA.z;
           const segLen = Math.hypot(segDx, segDz);
           if (segLen > 0.05) {
-            const segGeom = new THREE.PlaneGeometry(segLen + 0.5, 2.2);
+            const segGeom = new THREE.PlaneGeometry(
+              segLen + DIMENSIONS.grid.hitboxLengthPadding,
+              DIMENSIONS.grid.hitboxWidth
+            );
             segGeom.rotateX(-Math.PI / 2);
             const segMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
             const segMesh = new THREE.Mesh(segGeom, segMat);
-            segMesh.position.set((pA.x + pB.x) / 2, elev + 0.03, (pA.z + pB.z) / 2);
+            segMesh.position.set(
+              (pA.x + pB.x) / 2,
+              elev + DIMENSIONS.grid.yOffsets.hitbox,
+              (pA.z + pB.z) / 2
+            );
             segMesh.rotation.y = -Math.atan2(segDz, segDx);
             segMesh.userData = { isGridLineHit: true, gridId: grid.id };
             this.hitProxiesGroup.add(segMesh);
             this.gridHitMeshes.push(segMesh);
 
-            const hlGeom = new THREE.PlaneGeometry(segLen, 0.45);
+            const hlGeom = new THREE.PlaneGeometry(segLen, DIMENSIONS.grid.glowWidth);
             hlGeom.rotateX(-Math.PI / 2);
             const hlMat = new THREE.MeshBasicMaterial({
-              color: isSelected ? 0x0284c7 : 0x00e5ff,
+              color: isSelected ? THEME.grid.lineActive : THEME.grid.lineHover,
               transparent: true,
               opacity: isSelected ? 0.4 : isHovered ? 0.55 : 0,
               depthTest: false,
               side: THREE.DoubleSide,
             });
             const hlMesh = new THREE.Mesh(hlGeom, hlMat);
-            hlMesh.position.set((pA.x + pB.x) / 2, elev - 0.005, (pA.z + pB.z) / 2);
+            hlMesh.position.set(
+              (pA.x + pB.x) / 2,
+              elev + DIMENSIONS.grid.yOffsets.glow,
+              (pA.z + pB.z) / 2
+            );
             hlMesh.rotation.y = -Math.atan2(segDz, segDx);
             hlMesh.visible = isSelected || isHovered;
-            hlMesh.renderOrder = 900;
+            hlMesh.renderOrder = DIMENSIONS.renderOrders.gridLine;
             this.highlightsGroup.add(hlMesh);
             hlMeshes.push(hlMesh);
           }
@@ -295,39 +342,51 @@ export class GridRenderer {
 
         if (grid.showStartBubble && pStart) {
           const spStart = GridSprites.createBubbleSprite(grid.name, isSelected, isHovered);
-          spStart.position.copy(pStart).add(new THREE.Vector3(0, 0.02, 0));
+          spStart.position.copy(pStart).add(new THREE.Vector3(0, DIMENSIONS.grid.yOffsets.bubble, 0));
           spStart.userData = { isGridLineHit: true, isBubbleHit: true, gridId: grid.id, end: 'start' };
           this.bubblesGroup.add(spStart);
           this.bubbleSprites.push(spStart);
           bubbleRecord.start = spStart;
 
-          const bHit = this.createBubbleHitMesh(pStart.x, elev + 0.04, pStart.z, grid.id, 'start');
+          const bHit = this.createBubbleHitMesh(
+            pStart.x,
+            elev + DIMENSIONS.grid.yOffsets.bubbleHit,
+            pStart.z,
+            grid.id,
+            'start'
+          );
           this.hitProxiesGroup.add(bHit);
           this.gridHitMeshes.push(bHit);
           this.bubbleHits.push({
             gridId: grid.id,
             end: 'start',
             mesh: bHit,
-            worldPos: new THREE.Vector3(pStart.x, elev + 0.02, pStart.z),
+            worldPos: new THREE.Vector3(pStart.x, elev + DIMENSIONS.grid.yOffsets.bubble, pStart.z),
           });
         }
 
         if (grid.showEndBubble && pEnd) {
           const spEnd = GridSprites.createBubbleSprite(grid.name, isSelected, isHovered);
-          spEnd.position.copy(pEnd).add(new THREE.Vector3(0, 0.02, 0));
+          spEnd.position.copy(pEnd).add(new THREE.Vector3(0, DIMENSIONS.grid.yOffsets.bubble, 0));
           spEnd.userData = { isGridLineHit: true, isBubbleHit: true, gridId: grid.id, end: 'end' };
           this.bubblesGroup.add(spEnd);
           this.bubbleSprites.push(spEnd);
           bubbleRecord.end = spEnd;
 
-          const bHit = this.createBubbleHitMesh(pEnd.x, elev + 0.04, pEnd.z, grid.id, 'end');
+          const bHit = this.createBubbleHitMesh(
+            pEnd.x,
+            elev + DIMENSIONS.grid.yOffsets.bubbleHit,
+            pEnd.z,
+            grid.id,
+            'end'
+          );
           this.hitProxiesGroup.add(bHit);
           this.gridHitMeshes.push(bHit);
           this.bubbleHits.push({
             gridId: grid.id,
             end: 'end',
             mesh: bHit,
-            worldPos: new THREE.Vector3(pEnd.x, elev + 0.02, pEnd.z),
+            worldPos: new THREE.Vector3(pEnd.x, elev + DIMENSIONS.grid.yOffsets.bubble, pEnd.z),
           });
         }
 
@@ -360,7 +419,7 @@ export class GridRenderer {
     gridId: string,
     end: 'start' | 'end'
   ): THREE.Mesh {
-    const bubbleHitGeom = new THREE.CircleGeometry(2.2, 20);
+    const bubbleHitGeom = new THREE.CircleGeometry(DIMENSIONS.grid.bubbleHitRadius, 20);
     bubbleHitGeom.rotateX(-Math.PI / 2);
     const bubbleHitMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
     const bubbleHitMesh = new THREE.Mesh(bubbleHitGeom, bubbleHitMat);
@@ -377,10 +436,10 @@ export class GridRenderer {
     isActive: boolean
   ): void {
     const sprite = GridSprites.createElbowIconSprite(isActive);
-    sprite.position.set(point.x, elev + 0.07, point.z);
+    sprite.position.set(point.x, elev + DIMENSIONS.grid.yOffsets.toggleIcon, point.z);
     this.elbowsGroup.add(sprite);
 
-    const hitGeom = new THREE.PlaneGeometry(1.2, 1.2);
+    const hitGeom = new THREE.PlaneGeometry(DIMENSIONS.grid.toggleHitSize, DIMENSIONS.grid.toggleHitSize);
     hitGeom.rotateX(-Math.PI / 2);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
     const hitMesh = new THREE.Mesh(hitGeom, hitMat);
@@ -397,21 +456,28 @@ export class GridRenderer {
     elev: number
   ): void {
     const gripVisualGroup = new THREE.Group();
-    gripVisualGroup.position.set(point.x, elev + 0.08, point.z);
+    gripVisualGroup.position.set(point.x, elev + DIMENSIONS.grid.yOffsets.elbowGrip, point.z);
 
-    const ringGeom = new THREE.RingGeometry(0.18, 0.36, 24);
+    const ringGeom = new THREE.RingGeometry(
+      DIMENSIONS.grid.gripInnerRadius,
+      DIMENSIONS.grid.gripOuterRadius,
+      DIMENSIONS.grid.gripSegments
+    );
     ringGeom.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x9333ea,
+      color: THEME.grid.elbowGripRing,
       side: THREE.DoubleSide,
       depthTest: false,
     });
     gripVisualGroup.add(new THREE.Mesh(ringGeom, ringMat));
 
-    const innerGeom = new THREE.CircleGeometry(0.18, 24);
+    const innerGeom = new THREE.CircleGeometry(
+      DIMENSIONS.grid.gripInnerRadius,
+      DIMENSIONS.grid.gripSegments
+    );
     innerGeom.rotateX(-Math.PI / 2);
     const innerMat = new THREE.MeshBasicMaterial({
-      color: 0xc084fc,
+      color: THEME.grid.elbowGripInner,
       transparent: true,
       opacity: 0.55,
       side: THREE.DoubleSide,
@@ -421,11 +487,11 @@ export class GridRenderer {
     this.elbowsGroup.add(gripVisualGroup);
 
     // Hitbox Grip de codo
-    const hitGeom = new THREE.CircleGeometry(0.9, 20);
+    const hitGeom = new THREE.CircleGeometry(DIMENSIONS.grid.gripHitRadius, 20);
     hitGeom.rotateX(-Math.PI / 2);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
     const hitMesh = new THREE.Mesh(hitGeom, hitMat);
-    hitMesh.position.set(point.x, elev + 0.08, point.z);
+    hitMesh.position.set(point.x, elev + DIMENSIONS.grid.yOffsets.elbowGrip, point.z);
     hitMesh.userData = { isElbowGrip: true, gridId: grid.id, end };
     this.elbowsGroup.add(hitMesh);
     this.elbowGrips.push({ gridId: grid.id, end, mesh: hitMesh });
@@ -442,21 +508,28 @@ export class GridRenderer {
   ): void {
     // 1. Grip Visual
     const gripVisualGroup = new THREE.Group();
-    gripVisualGroup.position.set(point.x, elev + 0.06, point.z);
+    gripVisualGroup.position.set(point.x, elev + DIMENSIONS.grid.yOffsets.grip, point.z);
 
-    const ringGeom = new THREE.RingGeometry(0.18, 0.36, 24);
+    const ringGeom = new THREE.RingGeometry(
+      DIMENSIONS.grid.gripInnerRadius,
+      DIMENSIONS.grid.gripOuterRadius,
+      DIMENSIONS.grid.gripSegments
+    );
     ringGeom.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x0284c7,
+      color: THEME.grid.gripRing,
       side: THREE.DoubleSide,
       depthTest: false,
     });
     gripVisualGroup.add(new THREE.Mesh(ringGeom, ringMat));
 
-    const innerGeom = new THREE.CircleGeometry(0.18, 24);
+    const innerGeom = new THREE.CircleGeometry(
+      DIMENSIONS.grid.gripInnerRadius,
+      DIMENSIONS.grid.gripSegments
+    );
     innerGeom.rotateX(-Math.PI / 2);
     const innerMat = new THREE.MeshBasicMaterial({
-      color: 0x38bdf8,
+      color: THEME.grid.gripInner,
       transparent: true,
       opacity: 0.45,
       side: THREE.DoubleSide,
@@ -466,11 +539,11 @@ export class GridRenderer {
     this.gripsGroup.add(gripVisualGroup);
 
     // Hitbox Grip (radio 0.9m)
-    const hitGripGeom = new THREE.CircleGeometry(0.9, 20);
+    const hitGripGeom = new THREE.CircleGeometry(DIMENSIONS.grid.gripHitRadius, 20);
     hitGripGeom.rotateX(-Math.PI / 2);
     const hitGripMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
     const hitGripMesh = new THREE.Mesh(hitGripGeom, hitGripMat);
-    hitGripMesh.position.set(point.x, elev + 0.07, point.z);
+    hitGripMesh.position.set(point.x, elev + DIMENSIONS.grid.yOffsets.gripHit, point.z);
     hitGripMesh.userData = { isGrip: true, gridId: grid.id, end };
     this.gripsGroup.add(hitGripMesh);
     this.gripHandles.push({ gridId: grid.id, end, mesh: hitGripMesh });
@@ -478,7 +551,11 @@ export class GridRenderer {
     // Candado
     if (isAligned) {
       const lockSprite = GridSprites.createLockSprite(true);
-      lockSprite.position.set(point.x + dirX * 0.7, elev + 0.07, point.z + dirZ * 0.7);
+      lockSprite.position.set(
+        point.x + dirX * DIMENSIONS.grid.lockOffset,
+        elev + DIMENSIONS.grid.yOffsets.lock,
+        point.z + dirZ * DIMENSIONS.grid.lockOffset
+      );
       this.gripsGroup.add(lockSprite);
     }
 
@@ -488,12 +565,12 @@ export class GridRenderer {
     const perpX = -dirZ;
     const perpZ = dirX;
     toggleSprite.position.set(
-      point.x + dirX * 0.9 + perpX * 0.65,
-      elev + 0.07,
-      point.z + dirZ * 0.9 + perpZ * 0.65
+      point.x + dirX * DIMENSIONS.grid.checkboxDirOffset + perpX * DIMENSIONS.grid.checkboxPerpOffset,
+      elev + DIMENSIONS.grid.yOffsets.toggle,
+      point.z + dirZ * DIMENSIONS.grid.checkboxDirOffset + perpZ * DIMENSIONS.grid.checkboxPerpOffset
     );
 
-    const hitBoxGeom = new THREE.PlaneGeometry(1.2, 1.2);
+    const hitBoxGeom = new THREE.PlaneGeometry(DIMENSIONS.grid.toggleHitSize, DIMENSIONS.grid.toggleHitSize);
     hitBoxGeom.rotateX(-Math.PI / 2);
     const hitBoxMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
     const hitMesh = new THREE.Mesh(hitBoxGeom, hitBoxMat);
@@ -515,9 +592,9 @@ export class GridRenderer {
     this.clearAlignmentGuide();
     if (alignedGroup.length <= 1 || mainGrid.geomType !== 'line') return;
 
-    const isVert = Math.abs(mainGrid.start.x - mainGrid.end.x) < 0.2;
-    const isHoriz = Math.abs(mainGrid.start.z - mainGrid.end.z) < 0.2;
-    const elev = (LEVELS_Y[activeLevelIdx] || 0) + 0.08;
+    const isVert = Math.abs(mainGrid.start.x - mainGrid.end.x) < DIMENSIONS.grid.orthoTolerance;
+    const isHoriz = Math.abs(mainGrid.start.z - mainGrid.end.z) < DIMENSIONS.grid.orthoTolerance;
+    const elev = (LEVELS_Y[activeLevelIdx] || 0) + DIMENSIONS.grid.yOffsets.alignmentGuide;
 
     const coords: number[] = [];
     let pts: THREE.Vector3[] = [];
@@ -530,8 +607,12 @@ export class GridRenderer {
         if (g) coords.push(g.start.x);
       });
       const validCoords = coords.filter(c => Number.isFinite(c));
-      const minX = (validCoords.length > 0 ? Math.min(...validCoords) : mainGrid.start.x) - 4;
-      const maxX = (validCoords.length > 0 ? Math.max(...validCoords) : mainGrid.start.x) + 4;
+      const minX =
+        (validCoords.length > 0 ? Math.min(...validCoords) : mainGrid.start.x) -
+        DIMENSIONS.grid.alignmentGuideMargin;
+      const maxX =
+        (validCoords.length > 0 ? Math.max(...validCoords) : mainGrid.start.x) +
+        DIMENSIONS.grid.alignmentGuideMargin;
       pts = [new THREE.Vector3(minX, elev, z), new THREE.Vector3(maxX, elev, z)];
     } else if (isHoriz) {
       const x = activeEnd === 'start' ? mainGrid.start.x : mainGrid.end.x;
@@ -541,17 +622,21 @@ export class GridRenderer {
         if (g) coords.push(g.start.z);
       });
       const validCoords = coords.filter(c => Number.isFinite(c));
-      const minZ = (validCoords.length > 0 ? Math.min(...validCoords) : mainGrid.start.z) - 4;
-      const maxZ = (validCoords.length > 0 ? Math.max(...validCoords) : mainGrid.start.z) + 4;
+      const minZ =
+        (validCoords.length > 0 ? Math.min(...validCoords) : mainGrid.start.z) -
+        DIMENSIONS.grid.alignmentGuideMargin;
+      const maxZ =
+        (validCoords.length > 0 ? Math.max(...validCoords) : mainGrid.start.z) +
+        DIMENSIONS.grid.alignmentGuideMargin;
       pts = [new THREE.Vector3(x, elev, minZ), new THREE.Vector3(x, elev, maxZ)];
     }
 
     if (pts.length === 2 && Number.isFinite(pts[0].x) && Number.isFinite(pts[1].x)) {
       const geom = new THREE.BufferGeometry().setFromPoints(pts);
       const mat = new THREE.LineDashedMaterial({
-        color: 0x38bdf8,
-        dashSize: 2.8,
-        gapSize: 0.2,
+        color: THEME.grid.alignmentGuide,
+        dashSize: DIMENSIONS.grid.alignmentDashSize,
+        gapSize: DIMENSIONS.grid.alignmentGapSize,
         transparent: true,
         opacity: 0.9,
       });
@@ -572,9 +657,9 @@ export class GridRenderer {
 
   public showGuideLine(coordX: number | null, coordZ: number | null, activeLevelIdx: number): void {
     this.hideGuideLine();
-    const min = -25;
-    const max = 25;
-    const elev = (LEVELS_Y[activeLevelIdx] || 0) + 0.06;
+    const min = -DIMENSIONS.grid.guideLineExtent;
+    const max = DIMENSIONS.grid.guideLineExtent;
+    const elev = (LEVELS_Y[activeLevelIdx] || 0) + DIMENSIONS.grid.yOffsets.guideLine;
 
     const points: THREE.Vector3[] = [];
     if (coordX !== null) {
@@ -586,9 +671,9 @@ export class GridRenderer {
     if (points.length > 0) {
       const geom = new THREE.BufferGeometry().setFromPoints(points);
       const mat = new THREE.LineDashedMaterial({
-        color: 0x38bdf8,
-        dashSize: 2.5,
-        gapSize: 0.25,
+        color: THEME.grid.alignmentGuide,
+        dashSize: DIMENSIONS.grid.guideDashSize,
+        gapSize: DIMENSIONS.grid.guideGapSize,
         depthTest: false,
       });
       const guide = new THREE.Line(geom, mat);
@@ -619,13 +704,13 @@ export class GridRenderer {
     if (line) {
       const mat = line.material as THREE.LineDashedMaterial;
       if (isSelected) {
-        mat.color.set(0x0284c7);
+        mat.color.set(THEME.grid.lineActive);
         mat.opacity = 1.0;
       } else if (isHovered) {
-        mat.color.set(0x00e5ff); // Cyan eléctrico muy brillante
+        mat.color.set(THEME.grid.lineHover);
         mat.opacity = 1.0;
       } else {
-        mat.color.set(0x475569);
+        mat.color.set(THEME.grid.lineDefault);
         mat.opacity = 0.8;
       }
     }
@@ -636,7 +721,7 @@ export class GridRenderer {
       hm.visible = isSelected || isHovered;
       if (isSelected || isHovered) {
         const hmMat = hm.material as THREE.MeshBasicMaterial;
-        hmMat.color.set(isSelected ? 0x0284c7 : 0x00e5ff);
+        hmMat.color.set(isSelected ? THEME.grid.lineActive : THEME.grid.lineHover);
         hmMat.opacity = isSelected ? 0.4 : 0.55;
       }
     });
@@ -661,7 +746,7 @@ export class GridRenderer {
 
   public updateStyle(style: VisualStyle, selectedGridId: string | null): void {
     const isLight = style === 'hidden_line' || style === 'wireframe' || style === 'consistent_colors';
-    const color = isLight ? 0x94a3b8 : 0x475569;
+    const color = isLight ? THEME.grid.lineDefaultLight : THEME.grid.lineDefault;
 
     this.linesGroup.children.forEach(c => {
       const line = c as THREE.Line;
