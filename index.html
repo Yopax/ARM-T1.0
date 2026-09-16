@@ -111,6 +111,17 @@
               </div>
               <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Plano</div>
             </div>
+
+            <!-- Grupo: Cuantificación BIM & Base de Datos -->
+            <div class="tool-group flex gap-1 px-2 border-r border-white/10 items-center relative pb-3.5">
+              <button id="btn-open-schedule" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-sky-300 border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/50" title="Tablas de Planificación y Cómputos Métricos (Revit Schedule)">
+                <span class="text-base">📊</span><span>Tablas</span>
+              </button>
+              <button id="btn-select-by-id" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-slate-200 border border-transparent hover:bg-white/5 hover:border-white/10" title="Seleccionar por ID o UniqueId GUID (Revit Select by ID)">
+                <span class="text-base">🔍</span><span>Select ID</span>
+              </button>
+              <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">BIM Data</div>
+            </div>
           </div>
 
           <!-- PANEL: VISTA -->
@@ -134,6 +145,13 @@
               </button>
               <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Referencias</div>
             </div>
+
+            <div class="tool-group flex gap-1 px-2 border-r border-white/10 items-center relative pb-3.5">
+              <button id="btn-open-schedule-view" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-sky-300 border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/50" title="Abrir Tabla de Planificación / Metrados">
+                <span class="text-base">📊</span><span>Tablas</span>
+              </button>
+              <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Informes</div>
+            </div>
           </div>
 
           <!-- PANEL: GESTIONAR -->
@@ -143,6 +161,19 @@
                 <span class="text-base">🗑️</span><span>Limpiar</span>
               </button>
               <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Modelo</div>
+            </div>
+
+            <div class="tool-group flex gap-1 px-2 border-r border-white/10 items-center relative pb-3.5">
+              <button id="btn-open-mongo-inspector" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-emerald-300 border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/60" title="Inspeccionar Esquema MongoDB / BSON y ejecutar mongoimport">
+                <span class="text-base">🍃</span><span>MongoDB</span>
+              </button>
+              <button id="btn-export-csv-direct" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-slate-200 border border-transparent hover:bg-white/5 hover:border-white/10" title="Exportar Cómputos a CSV / Excel">
+                <span class="text-base">📥</span><span>CSV Excel</span>
+              </button>
+              <button id="btn-export-json-direct" class="ribbon-btn flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-md min-w-[54px] h-[52px] text-[11px] font-medium transition-all text-slate-200 border border-transparent hover:bg-white/5 hover:border-white/10" title="Descargar Dump BSON/JSON de la BD BIM">
+                <span class="text-base">💾</span><span>Dump JSON</span>
+              </button>
+              <div class="tool-group-label absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold pointer-events-none">Base de Datos</div>
             </div>
           </div>
         </div>
@@ -183,6 +214,18 @@
               <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-view="elev-south"><span>🏛️</span> Elevación Sur (Frontal)</div>
               <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-view="elev-east"><span>🏛️</span> Elevación Este (Lateral Derecha)</div>
               <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-view="elev-west"><span>🏛️</span> Elevación Oeste (Lateral Izquierda)</div>
+            </div>
+
+            <div class="text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider flex items-center justify-between">
+              <span>Tablas de Planificación</span>
+              <span class="text-[9px] bg-sky-950 text-sky-400 border border-sky-800 px-1 py-0.2 rounded font-mono">Revit</span>
+            </div>
+            <div id="browser-schedules-list" class="flex flex-col gap-0.5">
+              <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-schedule="ALL"><span>📊</span> Cómputos Generales (Todo el Modelo)</div>
+              <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-schedule="OST_StructuralColumns"><span>📊</span> Cómputos - Pilares Estructurales</div>
+              <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-schedule="OST_StructuralFraming"><span>📊</span> Cómputos - Armazón (Vigas)</div>
+              <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-schedule="OST_StructuralFoundation"><span>📊</span> Cómputos - Cimentación (Zapatas)</div>
+              <div class="tree-item flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer text-slate-300 hover:bg-white/5 hover:text-sky-400 transition-colors" data-open-schedule="OST_Floors"><span>📊</span> Cómputos - Suelos y Losas</div>
             </div>
 
             <div class="text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider">Familias de Concreto</div>
